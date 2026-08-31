@@ -1,0 +1,170 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "source": "Legal Metrology (Packaged Commodities) Rules, 2011",
+    "last_updated": "2026-08-31"
+  },
+  "categories": [
+    {
+      "id": "FOOD",
+      "name": "Food Products",
+      "description": "Packaged food and beverage products",
+      "subcategories": [
+        {
+          "id": "FOOD_GRAINS",
+          "name": "Grains and Cereals",
+          "keywords": ["rice", "wheat", "flour", "atta", "maida", "suji", "dal", "lentils", "pulses"],
+          "standard_units": ["g", "kg", "ml", "l"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"]
+        },
+        {
+          "id": "FOOD_SPICES",
+          "name": "Spices and Condiments",
+          "keywords": ["spice", "masala", "turmeric", "chili", "cumin", "coriander", "pepper", "cardamom"],
+          "standard_units": ["g", "kg"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "15"]
+        },
+        {
+          "id": "FOOD_OIL",
+          "name": "Edible Oils",
+          "keywords": ["oil", "sunflower", "mustard", "soybean", "olive", "groundnut", "coconut oil"],
+          "standard_units": ["ml", "l", "g", "kg"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "15"]
+        },
+        {
+          "id": "FOOD_DAIRY",
+          "name": "Dairy Products",
+          "keywords": ["milk", "butter", "cheese", "yogurt", "curd", "paneer", "ghee", "cream"],
+          "standard_units": ["ml", "l", "g", "kg"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "15"]
+        },
+        {
+          "id": "FOOD_SNACKS",
+          "name": "Snacks and Confectionery",
+          "keywords": ["chips", "biscuit", "cookies", "chocolate", "candy", "namkeen", "mixture", "wafers"],
+          "standard_units": ["g", "kg", "ml"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "15"]
+        },
+        {
+          "id": "FOOD_BEVERAGES",
+          "name": "Beverages",
+          "keywords": ["juice", "tea", "coffee", "soft drink", "water", "soda", "energy drink", "beverage"],
+          "standard_units": ["ml", "l", "g"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "15"]
+        },
+        {
+          "id": "FOOD_CANNED",
+          "name": "Canned and Preserved Foods",
+          "keywords": ["canned", "preserved", "pickle", "jam", "sauce", "ketchup", "vinegar"],
+          "standard_units": ["g", "kg", "ml", "l"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "15"]
+        }
+      ]
+    },
+    {
+      "id": "BEVERAGE",
+      "name": "Beverages",
+      "description": "Non-food beverage products",
+      "subcategories": [
+        {
+          "id": "BEV_SOFT_DRINK",
+          "name": "Soft Drinks",
+          "keywords": ["cola", "sprite", "fanta", "pepsi", "coke", "soda", "pop"],
+          "standard_units": ["ml", "l"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "15"]
+        },
+        {
+          "id": "BEV_JUICE",
+          "name": "Fruit Juices",
+          "keywords": ["juice", "nectar", "fruit drink", "pulpy"],
+          "standard_units": ["ml", "l"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "15"]
+        },
+        {
+          "id": "BEV_WATER",
+          "name": "Packaged Water",
+          "keywords": ["water", "mineral water", "drinking water", "spring water"],
+          "standard_units": ["ml", "l"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "15"]
+        }
+      ]
+    },
+    {
+      "id": "COSMETIC",
+      "name": "Cosmetics and Personal Care",
+      "description": "Cosmetic and personal care products",
+      "subcategories": [
+        {
+          "id": "COS_SKINCARE",
+          "name": "Skin Care",
+          "keywords": ["cream", "lotion", "moisturizer", "sunscreen", "serum", "face wash"],
+          "standard_units": ["g", "kg", "ml", "l"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "15"]
+        },
+        {
+          "id": "COS_HAIR",
+          "name": "Hair Care",
+          "keywords": ["shampoo", "conditioner", "hair oil", "hair cream", "hair dye"],
+          "standard_units": ["ml", "l", "g", "kg"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "15"]
+        },
+        {
+          "id": "COS_ORAL",
+          "name": "Oral Care",
+          "keywords": ["toothpaste", "toothbrush", "mouthwash", "dental"],
+          "standard_units": ["g", "kg", "ml"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "15"]
+        }
+      ]
+    },
+    {
+      "id": "PHARMACEUTICAL",
+      "name": "Pharmaceutical Products",
+      "description": "OTC pharmaceutical products (not prescription drugs)",
+      "subcategories": [
+        {
+          "id": "PHARMA_OTC",
+          "name": "OTC Medicines",
+          "keywords": ["tablet", "capsule", "syrup", "ointment", "drops", "powder"],
+          "standard_units": ["g", "kg", "ml", "l", "tablet", "capsule"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "15"]
+        }
+      ]
+    },
+    {
+      "id": "ELECTRONICS",
+      "name": "Electronic Products",
+      "description": "Electronic gadgets and accessories",
+      "subcategories": [
+        {
+          "id": "ELEC_CONSUMER",
+          "name": "Consumer Electronics",
+          "keywords": ["phone", "charger", "cable", "earphone", "headphone", "speaker", "battery"],
+          "standard_units": ["g", "kg", "ml"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "15"]
+        }
+      ]
+    },
+    {
+      "id": "GENERAL",
+      "name": "General Products",
+      "description": "General household and other products",
+      "subcategories": [
+        {
+          "id": "GEN_HOUSEHOLD",
+          "name": "Household Products",
+          "keywords": ["detergent", "soap", "cleaning", "bleach", "insecticide", "match", "candle"],
+          "standard_units": ["g", "kg", "ml", "l"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "15"]
+        },
+        {
+          "id": "GEN_TEXTILE",
+          "name": "Textiles",
+          "keywords": ["shirt", "trouser", "fabric", "cloth", "saree", "suit", "dress"],
+          "standard_units": ["g", "kg", "m", "cm"],
+          "applicable_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "15"]
+        }
+      ]
+    }
+  ]
+}
