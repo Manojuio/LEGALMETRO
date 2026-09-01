@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     # OCR
     OCR_LANGUAGE: list[str] = ["en"]
     OCR_GPU: bool = False
+    OCR_MAX_IMAGE_DIM: int = 1800
+    OCR_DENOISE: bool = True
+    OCR_THRESHOLD: bool = True
+    # Blocks below this confidence are kept as evidence but EXCLUDED from the
+    # text that feeds extraction — prevents OCR noise masquerading as product
+    # data (e.g. logos read as text).
+    OCR_MIN_CONFIDENCE: float = 0.25
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

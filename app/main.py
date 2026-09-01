@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.api import system
+from app.api import system, analysis
 
 settings = get_settings()
 
@@ -38,6 +38,7 @@ app.add_middleware(
 
 # API v1 router
 api_v1_router = system.router
+analysis_router = analysis.router
 
 
 @app.get("/health", tags=["system"], summary="Root health check")
@@ -61,3 +62,6 @@ def api_v1_root():
 
 # Mount system router under /api/v1
 app.include_router(api_v1_router, prefix=settings.API_V1_PREFIX)
+
+# Mount analysis router under /api/v1
+app.include_router(analysis_router, prefix=settings.API_V1_PREFIX)

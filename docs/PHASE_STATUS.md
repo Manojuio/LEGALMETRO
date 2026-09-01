@@ -113,34 +113,104 @@
 - **Status:** PENDING
 
 ## Phase 8: Image Upload
-- **Status:** PENDING
+- **Status:** COMPLETED (with Phase 9)
+- **Date:** 2026-09-01
+- **Files:**
+  - app/services/image_service.py (validation: empty/size/MIME/decode; preprocessing: resize/denoise/threshold)
+  - POST /api/v1/analyses/{id}/images endpoint
+- **Decisions:** Image binaries on disk, metadata in DB; EXIF transpose before OCR; preprocessing steps recorded for audit.
 
 ## Phase 9: OCR
-- **Status:** PENDING
+- **Status:** COMPLETED
+- **Date:** 2026-09-01
+- **Files Created:**
+  - app/services/image_service.py
+  - app/services/ocr_service.py
+  - app/schemas/image.py
+  - app/api/analysis.py
+  - scripts/generate_fixtures.py
+  - tests/fixtures/*.jpg
+  - tests/test_ocr.py
+  - tests/test_analysis_api.py
+  - docs/OCR.md
+- **Endpoints Added:**
+  - POST /api/v1/analyses
+  - POST /api/v1/analyses/{id}/images
+  - POST /api/v1/analyses/{id}/ocr
+- **Database:**
+  - Uses existing `product_images`, `ocr_results`, `analyses` tables
+  - No schema change needed (tables already existed from Phase 4/5)
+- **Tests:** 31 passed (7 new OCR tests + 7 analysis API tests)
+- **Decisions:**
+  - OCR is evidence extraction only, not compliance decision (central principle)
+  - EasyOCR reader cached as module-level singleton to avoid reload per request
+  - Image binaries stored on disk, only metadata in DB
+  - Preprocessing steps recorded in `steps_applied` for auditability
+  - Accuracy measured on own test dataset only (0.82 on tea fixture), not claimed generally
+  - Low-confidence OCR blocks (conf < OCR_MIN_CONFIDENCE=0.25) excluded from extraction text but kept as evidence
+- **Known Limitations:**
+  - Photos at angle / curved packaging reduce accuracy
+  - Font size not measured precisely (visual rules enforce REVIEW)
+  - Physical quantity never verified from image
+- **Next Phase:** Phase 10 - Information Extraction
 
 ## Phase 10: Information Extraction
-- **Status:** PENDING
+- **Status:** COMPLETED (working core)
+- **Date:** 2026-09-01
+- **Files Created:**
+  - app/services/extraction_service.py
+  - tests/test_extraction.py
+- **Fields Extracted:** commodity_name (OCR-typo tolerant), generic_name, manufacturer_name, manufacturer_address, country_of_origin (Made in / Product of India), net_quantity (value/unit/numeric, partial REVIEW fallback), mrp, batch_number (requires digit; handles BN-2601 style), packing_date, best_before_date (duration form accepted), expiry_date, consumer_care_contact, dates
+- **Principles:**
+  - Extraction never invents data; missing field => not present (engine decides FAIL/REVIEW)
+  - REgex-based, deterministic, auditable source_text on every field
+  - Net-quantity label seen but unit unreadable => partial field (REVIEW), never FAIL
+- **Next Phase:** Phase 11
 
 ## Phase 11: Product Classification
-- **Status:** PENDING
+- **Status:** COMPLETED (keyword-based working core)
+- **Date:** 2026-09-01
+- **Files Created:** app/services/classification_service.py
+- **Decisions:** Keyword matching on extracted text against rules/categories.json; supports multi-image evidence.
 
 ## Phase 12: Applicability Engine
-- **Status:** PENDING
+- **Status:** COMPLETED (working core, exemptions applied + build-level included)
+- **Date:** 2026-09-01
+- **Files Created:** app/compliance/applicability.py + rules/exemptions.json usage
+- **Decisions:** Physical test rules (19/20) NOT_APPLICABLE from image-only evidence; visual rules (7/8/9) AI_ASSISTED => REVIEW.
 
 ## Phase 13: Compliance Engine
-- **Status:** PENDING
+- **Status:** COMPLETED (working core)
+- **Date:** 2026-09-01
+- **Files Created:**
+  - app/compliance/rule_engine.py (run_rules, aggregate_overall)
+  - app/compliance/validators/declaration.py (Status, ValidationOutcome)
+- **Decisions:**
+  - Overall status = worst of individual rule statuses (PASS < REVIEW < FAIL)
+  - Validators can return REVIEW for unreliable-but-present evidence (net quantity, visual rules)
+  - Rules 3/4/6/etc. aggregate RequiredDeclarations across extracted fields and evidence
+- **Tests:** 43 passed total (incl. test_extraction.py 8, test_compliance_pipeline.py 4)
 
 ## Phase 14: CV Checks
-- **Status:** PENDING
+- **Status:** DEFERRED (font-size/measurement checks stay REVIEW; rules 7/8/9 honest)
 
 ## Phase 15: Complete /analyze endpoint
-- **Status:** PENDING
+- **Status:** COMPLETED (working core)
+- **Date:** 2026-09-01
+- **Files Created:** app/services/compliance_service.py (run_complete_analysis orchestration) + POST /api/v1/analyses/{id}/run
 
 ## Phase 16: Evidence System
-- **Status:** PENDING
+- **Status:** COMPLETED (working core)
+- **Date:** 2026-09-01
+- **Files Created:** evidence persisted per check (type, field, value, confidence, partial flags); ocr_results rows keep low-confidence blocks.
 
 ## Phase 17: Reports
-- **Status:** PENDING
+- **Status:** COMPLETED (working core)
+- **Date:** 2026-09-01
+- **Files Created:** app/services/report_service.py (ReportLab) + GET /api/v1/analyses/{id}/report
+- **Output:** PDF with product summary, per-rule color-coded status table (PASS/REVIEW/FAIL), evidence, and limitations disclaimer.
+- **Test:** test_report_generation_after_run asserts `%PDF` header;
+  verified real report on biscuit images (demo_analysis_*.pdf under reports/).
 
 ## Phase 18: Inspection Workflow
 - **Status:** PENDING
