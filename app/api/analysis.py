@@ -1,7 +1,6 @@
 """Analysis endpoints: create analysis, upload images, run OCR.
 
-NOTE: Authentication is not yet implemented (Phase 6). These endpoints are
-public for now and will be locked down when JWT/RBAC is added.
+Phase 9+ — analysis lifecycle with JWT/RBAC protection.
 """
 
 import uuid
@@ -10,6 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.deps import get_current_user
 from app.models.analysis import (
     Analysis,
     AnalysisStatus,
@@ -24,6 +24,58 @@ from app.services import image_service, ocr_service, compliance_service, report_
 router = APIRouter()
 
 
+def _get_owned_analysis(analysis_id: str, user: User, db: Session) -> Analysis:
+    """Return an analysis, enforcing that the user may access it.
+
+    Admin/LMO can view any analysis; other roles can only access their own.
+    """
+    analysis = db.get(Analysis, analysis_id)
+    if analysis is None:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    if user.role.value in ("ADMIN", "LMO"):
+        return analysis
+    if analysis.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your analysis")
+    return analysis
+
+
+@router.get(
+    "/analyses",
+    summary="List analyses visible to the current user",
+    tags=["analysis"],
+)
+def list_analyses(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return analyses the current user is allowed to see.
+
+    - ADMIN/LMO: all analyses across every user
+    - MANUFACTURER/RETAILER/CONSUMER: only their own analyses
+    """
+    if current_user.role.value in ("ADMIN", "LMO"):
+        analyses = db.query(Analysis).order_by(Analysis.created_at.desc()).all()
+    else:
+        analyses = (
+            db.query(Analysis)
+            .filter(Analysis.user_id == current_user.id)
+            .order_by(Analysis.created_at.desc())
+            .all()
+        )
+    return [
+        {
+            "id": a.id,
+            "status": a.status.value,
+            "overall_status": a.overall_status.value if a.overall_status else None,
+            "category": a.category,
+            "subcategory": a.subcategory,
+            "summary": a.summary_json,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        }
+        for a in analyses
+    ]
+
+
 @router.post(
     "/analyses",
     status_code=201,
@@ -34,19 +86,14 @@ def create_analysis(
     category: str | None = Form(default=None),
     subcategory: str | None = Form(default=None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Create an empty analysis owned by the current user.
+    """Create an empty analysis owned by the current authenticated user.
 
-    Until auth is added, a system placeholder user is used. Images can then
-    be uploaded to this analysis.
+    Images can then be uploaded to this analysis.
     """
-    # Temporary owner until Phase 6: use first non-admin user or create one.
-    owner = db.query(User).filter(User.role != "ADMIN").first()
-    if owner is None:
-        raise HTTPException(status_code=400, detail="No analysis owner available")
-
     analysis = Analysis(
-        user_id=owner.id,
+        user_id=current_user.id,
         category=category,
         subcategory=subcategory,
         status=AnalysisStatus.PENDING,
@@ -68,15 +115,14 @@ def upload_image(
     file: UploadFile = File(...),
     position: str = Form(default="OTHER"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> UploadedImageResponse:
     """Validate and store one image for the analysis.
 
     Limits: file type, size, decodability are enforced here. The binary is
     stored on disk under uploads/analysis_<id>/; only metadata is persisted.
     """
-    analysis = db.get(Analysis, analysis_id)
-    if analysis is None:
-        raise HTTPException(status_code=404, detail="Analysis not found")
+    analysis = _get_owned_analysis(analysis_id, current_user, db)
 
     try:
         position_enum = ImagePosition[position.upper()]
@@ -138,6 +184,7 @@ def upload_image(
 def run_ocr(
     analysis_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     """Run the OCR pipeline on every image attached to the analysis.
 
@@ -145,9 +192,7 @@ def run_ocr(
     to EasyOCR. Raw text, per-block confidence, and bounding boxes are
     persisted as evidence — NOT used to make compliance decisions here.
     """
-    analysis = db.get(Analysis, analysis_id)
-    if analysis is None:
-        raise HTTPException(status_code=404, detail="Analysis not found")
+    analysis = _get_owned_analysis(analysis_id, current_user, db)
 
     images = db.query(ProductImage).filter(ProductImage.analysis_id == analysis_id).all()
     if not images:
@@ -223,6 +268,7 @@ def run_ocr(
 def run_analysis(
     analysis_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     """Orchestrate the full compliance pipeline and return structured results.
 
@@ -234,9 +280,7 @@ def run_analysis(
     6. Aggregate into PASS / FAIL / REVIEW
     7. Persist results
     """
-    analysis = db.get(Analysis, analysis_id)
-    if analysis is None:
-        raise HTTPException(status_code=404, detail="Analysis not found")
+    analysis = _get_owned_analysis(analysis_id, current_user, db)
 
     return compliance_service.run_complete_analysis(analysis, db)
 
@@ -249,15 +293,14 @@ def run_analysis(
 def generate_report(
     analysis_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Generate and return a PDF compliance report for the analysis.
 
     If the analysis has no results yet, it is not auto-run here; the client
     should call /run first. Returns the PDF file as a download.
     """
-    analysis = db.get(Analysis, analysis_id)
-    if analysis is None:
-        raise HTTPException(status_code=404, detail="Analysis not found")
+    analysis = _get_owned_analysis(analysis_id, current_user, db)
 
     if analysis.overall_status is None:
         raise HTTPException(
@@ -284,21 +327,47 @@ def generate_report(
         for rr, rule in rule_results
     ]
 
+    # Get extracted fields to calculate scoring
+    from app.models.analysis import ExtractedField as ExtractedFieldModel
+    from app.services.extraction_service import ExtractionResult, ExtractedField
+    
+    extracted_fields = db.query(ExtractedFieldModel).filter(
+        ExtractedFieldModel.analysis_id == analysis_id
+    ).all()
+    
+    # Reconstruct extraction result for scoring
+    extraction = ExtractionResult(raw_text="")
+    for ef in extracted_fields:
+        extraction.fields[ef.field_name] = ExtractedField(
+            field_name=ef.field_name,
+            value=ef.field_value,
+            numeric=ef.field_value_numeric,
+            confidence=ef.confidence,
+            source_text=ef.source_text or "",
+        )
+    
+    # Calculate compliance score
+    from app.compliance.scoring import calculate_score
+    compliance_score = calculate_score(extraction)
+
     summary = analysis.summary_json or {}
     analysis_data = {
         "analysis_id": analysis.id,
         "product": {
             "name": analysis.category or "Unknown",
             "category": f"{analysis.category} / {analysis.subcategory}",
+            "subcategory": analysis.subcategory or "",
+            "classification_confidence": 0.9,
         },
         "overall_status": analysis.overall_status.value,
         "summary": summary,
+        "compliance_score": compliance_score.get_summary(),
         "rules": checks,
     }
 
     generator = report_service.ReportGenerator()
     try:
-        report_path = generator.generate(analysis_data)
+        report_path = generator.generate(analysis_data, compliance_score)
     except Exception as exc:  # pragma: no cover - report build failure
         raise HTTPException(status_code=500, detail=f"Report generation failed: {exc}")
 

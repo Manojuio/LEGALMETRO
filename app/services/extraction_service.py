@@ -20,6 +20,9 @@ _MRP_RES = [
     re.compile(r"\bMRP\s*(?:Rs\.?|INR|₹)?\s*:?\s*(\d+(?:\.\d+)?)", re.IGNORECASE),
     re.compile(r"\bMRP\s*(?:Rs\.?|INR|₹)\s*(\d+(?:\.\d+)?)", re.IGNORECASE),
     re.compile(r"\bMax\.?\s*Retail\s+Price\s*(?:Rs\.?|INR|₹)?\s*:?\s*(\d+(?:\.\d+)?)", re.IGNORECASE),
+    # OCR disfigurement of "MRP": "4VAP", "MRRP", "MRF" etc followed by Rs/₹
+    re.compile(r"\bM{1,2}[RPI]{1,2}[PI]?\s*(?:Rs\.?|INR|₹)\s*:?\s*(\d+(?:\.\d+)?)", re.IGNORECASE),
+    re.compile(r"\bMRP\s*[:\-]?\s*(?:Rs\.?|INR|₹)?\s*(\d+(?:\.\d+)?)\b", re.IGNORECASE),
 ]
 
 _UNIT_PATTERNS = {
@@ -92,10 +95,10 @@ def _clean_text(text: str) -> str:
 
 
 def extract_net_quantity(text: str) -> ExtractedField | None:
-    """Find 'Net Wt. 500 g', 'Net quantity 1 l', etc."""
+    """Find 'Net Wt. 500 g', 'Net quantity 1 l', 'Net Content: 50 ml', etc."""
     m = re.search(
-        r"\b(?:net\s*(?:wt\.?|weight|qty\.?|quantity|contents?)?\s*[:\-]?\s*"
-        r"(\d+(?:\.\d+)?)\s*(kg|kg\.|g|gm|g\.|grams?|ml|l|lit(?:re|er)s?|millilit(?:re|er)s?|nos\.?|pcs\.?|pieces?|tablets?|capsules?|cm|mm|m|cl|dl))",
+        r"\b(?:net\s*(?:wt\.?|weight|qty\.?|quantity|contents?)?|nel\s*(?:conlent|content|qty)|n\.?\s*w\.?)\s*[:\-]?\s*"
+        r"(\d+(?:\.\d+)?)\s*(kg|kg\.|g|gm|g\.|grams?|ml|l|lit(?:re|er)s?|millilit(?:re|er)s?|nos\.?|pcs\.?|pieces?|tablets?|capsules?|cm|mm|m|cl|dl|%)\b",
         text,
         re.IGNORECASE,
     )
@@ -210,8 +213,9 @@ def extract_country_of_origin(text: str) -> ExtractedField | None:
         text, re.IGNORECASE,
     )
     if not m:
+        # OCR frequently merges "Made in India" -> "Madein India", "Made InIndia"
         m = re.search(
-            r"\b(?:made|product)\s+(?:in|of)\s+([A-Za-z][A-Za-z ]{1,19})",
+            r"\b(?:made\s*in|madein|product\s+of|productof|packed\s+in)\s*:?\s*([A-Za-z][A-Za-z ]{1,19})",
             text, re.IGNORECASE,
         )
     if m:
@@ -340,14 +344,26 @@ def extract_commodity_name(text: str) -> ExtractedField | None:
             confidence=0.85,
             source_text=m.group(0),
         )
-    # Heuristic: first line that isn't an obvious label keyword line
+    # Heuristic: first line that isn't an obvious label keyword line.
+    # To avoid the lenient text-pass (low-confidence OCR concatenation),
+    # only accept a candidate that is a reasonable length and mostly letters.
     lines = [l for l in text.splitlines() if l.strip() and not re.search(r"\b(mrp|net wt|net weight|mfd|packed|customer care|consumer care|best before|use by|batch|lot no|ingredients)\b", l, re.IGNORECASE)]
-    if lines:
+    for candidate in lines:
+        cand = candidate.strip()
+        if not cand:
+            continue
+        words = cand.split()
+        # Reject long garbage runs and mostly-numeric strings
+        if len(cand) > 60:
+            continue
+        letters = sum(1 for ch in cand if ch.isalpha())
+        if letters < len(words) * 2:
+            continue
         return ExtractedField(
             field_name="commodity_name",
-            value=lines[0].strip(),
+            value=cand,
             confidence=0.6,
-            source_text=lines[0],
+            source_text=cand,
         )
     return None
 

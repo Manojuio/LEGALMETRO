@@ -107,10 +107,29 @@
 - **Next Phase:** Phase 6 - Authentication + RBAC
 
 ## Phase 6: Authentication + RBAC
-- **Status:** PENDING
+- **Status:** COMPLETED
+- **Date:** 2026-09-02
+- **Files Created:**
+  - app/schemas/auth.py (RegisterRequest, LoginRequest, UserOut, TokenResponse, UserUpdateRequest, ZoneOut)
+  - app/core/deps.py (get_current_user, require_roles, get_current_lmo)
+  - app/api/auth.py (register, login, me, zones CRUD, user list/update, admins/lmos)
+  - app/models/user.py (Zone model + users.zone_id)
+  - app/core/security.py (reused: bcrypt + python-jose)
+- **Endpoints Added:**
+  - POST /api/v1/auth/register, POST /api/v1/auth/login, GET /api/v1/auth/me
+  - POST/GET /api/v1/zones (ADMIN), GET /api/v1/users (ADMIN)
+  - PATCH /api/v1/users/{id} (ADMIN, zone assignment), GET /api/v1/admins/lmos (ADMIN)
+- **Database Change:** new `zones` table + `users.zone_id` column (added via ALTER TABLE on existing DB)
+- **Decisions:** Self-registration restricted to CONSUMER/RETAILER/MANUFACTURER; ADMIN/LMO elevated roles require admin; analysis/product/inspection endpoints now JWT-protected with ownership checks.
 
 ## Phase 7: Product Management
-- **Status:** PENDING
+- **Status:** COMPLETED
+- **Date:** 2026-09-02
+- **Files Created:** app/api/products.py
+- **Endpoints Added:**
+  - GET /api/v1/products (ADMIN/LMO/MANUFACTURER/RETAILER)
+  - POST/PATCH/DELETE /api/v1/products (ADMIN, or owning MANUFACTURER)
+- **Decisions:** CONSUMER cannot view products; MANUFACTURER can only modify own products (created_by check).
 
 ## Phase 8: Image Upload
 - **Status:** COMPLETED (with Phase 9)
@@ -190,6 +209,7 @@
   - Validators can return REVIEW for unreliable-but-present evidence (net quantity, visual rules)
   - Rules 3/4/6/etc. aggregate RequiredDeclarations across extracted fields and evidence
 - **Tests:** 43 passed total (incl. test_extraction.py 8, test_compliance_pipeline.py 4)
+- **Full suite now:** 61 passed (after Phase 6/7/18 + JWT auth updates to analysis/pipeline tests)
 
 ## Phase 14: CV Checks
 - **Status:** DEFERRED (font-size/measurement checks stay REVIEW; rules 7/8/9 honest)
@@ -213,10 +233,24 @@
   verified real report on biscuit images (demo_analysis_*.pdf under reports/).
 
 ## Phase 18: Inspection Workflow
-- **Status:** PENDING
+- **Status:** COMPLETED
+- **Date:** 2026-09-02
+- **Files Created:** app/api/inspections.py
+- **Endpoints Added:**
+  - POST/GET /api/v1/inspections (ADMIN / LMO)
+  - PATCH/GET /api/v1/inspections/{id} (ADMIN / owning LMO)
+  - GET /api/v1/dashboard/summary (all roles, role-aware; ADMIN sees lmos_by_zone)
+- **Decisions:** LMO sees only own inspections; ADMIN sees all; inspection attaches to an existing analysis.
 
 ## Phase 19: React Frontend
-- **Status:** PENDING
+- **Status:** COMPLETED
+- **Date:** 2026-09-02
+- **Files Created:** frontend/ (Vite + React 18 + React Router)
+  - src/auth/AuthContext.jsx, src/api.js, src/components/Layout.jsx
+  - src/pages/{Login,Register,Dashboard,Analyze,AnalysisDetail,Admin}.jsx, src/styles.css
+- **Flow:** Login/register → role-based dashboard → image-upload analysis (create → upload → run → PDF report) → field inspection (ADMIN/LMO).
+- **Dashboards:** ADMIN sees LMOs by zone + zone assignment; LMO sees own inspections; MANUFACTURER sees products + own analyses; RETAILER/CONSUMER own analyses.
+- **Decisions:** Vite dev server (port 5173) proxies /api to backend (8000); CORS allows localhost:5173; PDF report downloaded via authenticated fetch (not plain link).
 
 ## Phase 20: Interactive Analysis UI
 - **Status:** PENDING

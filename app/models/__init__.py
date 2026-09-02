@@ -1,6 +1,6 @@
 """SQLAlchemy database models — re-exported for convenience."""
 
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, Zone
 from app.models.product import Product
 from app.models.analysis import (
     Analysis,
@@ -27,6 +27,7 @@ from app.models.inspection import (
 __all__ = [
     "User",
     "UserRole",
+    "Zone",
     "Product",
     "Analysis",
     "AnalysisStatus",

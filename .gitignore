@@ -26,6 +26,14 @@ wheels/
 # Uploads and reports (user-generated content)
 uploads/
 reports/
+productimage/
+
+# Backend logs
+*.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
 
 # Test coverage
 .coverage

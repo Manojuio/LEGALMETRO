@@ -1,7 +1,7 @@
 """Compliance orchestration service.
 
 Ties the full pipeline together for a single analysis:
-  OCR → extraction → classification → applicability → rule engine → aggregate
+  OCR → extraction → classification → applicability → rule engine → aggregate → scoring
 
 This produces the structured data that both the API response and the PDF
 report are built from. It is the only place the pipeline is invoked
@@ -10,6 +10,7 @@ end-to-end.
 
 from app.compliance import applicability
 from app.compliance import rule_engine
+from app.compliance.scoring import calculate_score, ComplianceScore
 from app.services import classification_service, extraction_service, ocr_service, image_service
 
 from app.models.analysis import Analysis, ProductImage, OCRResult, ExtractedField
@@ -102,7 +103,8 @@ def run_complete_analysis(analysis: Analysis, db) -> dict:
     # 1. OCR (reuse if already run)
     raw_text = _run_ocr_and_persist(analysis, db)
 
-    # 2. Extraction
+    # 2. Extraction — use lenient OCR text so low-confidence-but-genuine
+    #    declarations are still recovered; validators later gate on quality.
     extraction = extraction_service.run_extraction(raw_text)
     _persist_extraction(analysis, extraction, db)
 
@@ -135,14 +137,17 @@ def run_complete_analysis(analysis: Analysis, db) -> dict:
     )
     aggregated = rule_engine.aggregate_overall(checks)
 
-    # 6. Persist analysis metadata + results
+    # 6. Calculate compliance score based on 10 key parameters
+    compliance_score = calculate_score(extraction)
+
+    # 7. Persist analysis metadata + results
     analysis.status = "COMPLETED"
     analysis.overall_status = aggregated["overall_status"]
     analysis.summary_json = aggregated["summary"]
     _persist_rule_results(analysis, checks, db)
     db.commit()
 
-    # 7. Build response
+    # 8. Build response with scoring
     return {
         "analysis_id": analysis.id,
         "product": {
@@ -153,6 +158,7 @@ def run_complete_analysis(analysis: Analysis, db) -> dict:
         },
         "overall_status": aggregated["overall_status"],
         "summary": aggregated["summary"],
+        "compliance_score": compliance_score.get_summary(),
         "rules": [_check_to_dict(c) for c in checks],
         "extracted_fields": extraction_service.extraction_to_dict(extraction),
         "applicability": {

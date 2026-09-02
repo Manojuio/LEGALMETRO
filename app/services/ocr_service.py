@@ -40,6 +40,7 @@ class OCRResult:
 
     blocks: list[OCRBlock] = field(default_factory=list)
     raw_text: str = ""
+    lenient_text: str = ""
     confidence_score: float = 0.0
     processing_time_ms: int = 0
     engine: str = "easyocr"
@@ -111,20 +112,48 @@ def run_ocr(image_data: np.ndarray, steps_applied: list[str] | None = None) -> O
         )
         confidence_total += float(conf)
 
-    # Only confident, non-empty blocks feed the raw_text used for extraction.
-    # ALL blocks are kept as evidence; low-confidence ones are simply not
-    # trusted for structured data.
-    non_empty = [b for b in blocks if b.text and b.confidence >= min_conf]
+    # Blocks above min confidence feed the "clean" raw_text used for
+    # extraction. However, small-print declarations on many real packages are
+    # read at low OCR confidence yet carry genuine data (MRP, net qty, batch,
+    # dates). So we ALSO keep a lenient text-pass built from every non-empty
+    # block; extraction regexes naturally filter out OCR noise, so this
+    # recovers genuine but low-confidence declarations without polluting
+    # decisions (validators still sanity-check values).
+    non_empty = [b for b in blocks if b.text]
     if non_empty:
         confidence_score = sum(b.confidence for b in non_empty) / len(non_empty)
     else:
         confidence_score = 0.0
 
-    raw_text = "\n".join(b.text for b in non_empty)
+    # Confident-only text (used elsewhere)
+    confident_non_empty = [b for b in blocks if b.text and b.confidence >= min_conf]
+    raw_text_confident = "\n".join(b.text for b in confident_non_empty)
+
+    # Lenient text: every readable token, grouped into visual lines by
+    # vertical (row) proximity, then left-to-right within each row. This
+    # preserves line structure for line-based extraction heuristics while
+    # still including low-confidence-but-genuine declarations.
+    ordered = sorted(
+        (b for b in blocks if b.text),
+        key=lambda b: (b.bbox[1] if b.bbox else 0, b.bbox[0] if b.bbox else 0),
+    )
+    lines: list[list[str]] = []
+    current_row = None
+    current_row_y = None
+    for b in ordered:
+        y = b.bbox[1] if b.bbox else 0
+        if current_row_y is None or abs(y - current_row_y) > 15:
+            current_row = [b.text]
+            current_row_y = y
+            lines.append(current_row)
+        else:
+            current_row.append(b.text)
+    raw_text_lenient = "\n".join(" ".join(row) for row in lines)
 
     return OCRResult(
         blocks=blocks,
-        raw_text=raw_text,
+        raw_text=raw_text_confident,
+        lenient_text=raw_text_lenient,
         confidence_score=round(confidence_score, 4),
         processing_time_ms=elapsed_ms,
         steps_applied=list(steps_applied or []),

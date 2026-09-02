@@ -23,22 +23,51 @@ from app.main import app
 
 @pytest.fixture(scope="session")
 def client():
-    """Provide a FastAPI TestClient.
-
-    Health check / version endpoints do not require authentication or
-    database access, so this fixture only sets up the app.
-    """
+    """Provide a public FastAPI TestClient (no auth)."""
     with TestClient(app) as c:
         yield c
 
 
+@pytest.fixture(scope="session")
+def auth_client(client):
+    """Authenticated client logged in as a seeded non-admin user.
+
+    Uses the seeded retailer account (retailer@example.com / retail123),
+    which can create analyses and upload images. Created on its own
+    TestClient so it does not pollute the public `client` fixture.
+    """
+    with TestClient(app) as c:
+        resp = c.post(
+            "/api/v1/auth/login",
+            json={"email": "retailer@example.com", "password": "retail123"},
+        )
+        assert resp.status_code == 200, resp.text
+        token = resp.json()["access_token"]
+        c.headers.update({"Authorization": f"Bearer {token}"})
+        yield c
+
+
+@pytest.fixture(scope="session")
+def client_factory(client):
+    """Return a helper to build an authenticated client for a given role.
+
+    Usage:
+        admin = client_factory("admin@example.com", "admin123")
+    """
+    def _make(email, password):
+        c = TestClient(app)
+        r = c.post("/api/v1/auth/login", json={"email": email, "password": password})
+        assert r.status_code == 200, r.text
+        token = r.json()["access_token"]
+        c.headers.update({"Authorization": f"Bearer {token}"})
+        return c
+
+    return _make
+
+
 @pytest.fixture(scope="session", autouse=True)
 def prepare_database():
-    """Ensure tables exist in the single database.
-
-    Best-effort — /health and /version do not need tables.
-    Uses the same database as the running app for demo convenience.
-    """
+    """Ensure tables exist in the single database."""
     try:
         Base.metadata.create_all(bind=engine)
     except Exception:
