@@ -12,6 +12,7 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=6)
     full_name: str = Field(min_length=1)
     role: UserRole = UserRole.CONSUMER
+    zone_id: str | None = None
 
 
 class LoginRequest(BaseModel):

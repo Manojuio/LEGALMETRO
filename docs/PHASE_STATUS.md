@@ -254,3 +254,176 @@
 
 ## Phase 20: Interactive Analysis UI
 - **Status:** PENDING
+
+---
+
+# OCR Engine Rebuild (image → OCR → field extraction)
+
+Rebuild of the core OCR/vision pipeline per the engine spec. Tracked with its
+own phase list; full design in docs/OCR_ENGINE.md and the Phase 0 audit in
+docs/OCR_ENGINE_AUDIT.md. One phase at a time, STOP for review after each.
+
+## Rebuild Phase 0: Audit
+- **Status:** COMPLETED
+- **Date:** 2026-09-03
+- **Files Created/Updated:** docs/OCR_ENGINE_AUDIT.md (re-verified against code)
+- **Findings:** 6-variant/3-pass OCR unproven; config toggles dead; no quality
+  assessment; no line reconstruction; no field status/conflict/traceability;
+  duplicated OCR loops; dead code; per-image failure tolerance missing.
+
+## Rebuild Phase 1: Image Validation
+- **Status:** COMPLETED
+- **Date:** 2026-09-03
+- **Files Created:**
+  - app/services/image/__init__.py
+  - app/services/image/validator.py (validate_image_bytes, validate_image_file,
+    ImageValidationError with stable codes, INVALID_IMAGE / IMAGE_DECODE_FAILED /
+    IMAGE_TOO_LARGE / IMAGE_TOO_SMALL / IMAGE_NOT_FOUND)
+  - tests/test_image_validator.py (12 tests)
+- **Files Modified:**
+  - app/services/image_service.py (validate_image_bytes delegates to validator;
+    ImageValidationError re-exported — existing callers unchanged)
+  - pyproject.toml (testpaths = ["tests"] — root test_images.py dev script was
+    crashing pytest's capture plugin on Windows)
+- **API Changes:** none (endpoints and response shapes unchanged)
+- **Database Changes:** none
+- **Tests:** 77 passed (65 existing + 12 new), 143s
+- **Decisions:** size check before decode; format check on decoded container;
+  legacy single-arg ImageValidationError kept for compatibility
+- **Limitations:** multi-frame/EXIF beyond first frame handled in later phases
+- **Next Phase:** Rebuild Phase 2 - Image Quality Assessment
+
+## Rebuild Phase 2: Image Quality Assessment
+- **Status:** COMPLETED
+- **Date:** 2026-09-03
+- **Files Created:**
+  - app/services/image/quality.py (assess / assess_bytes / ImageQuality;
+    deterministic blur/brightness/contrast metrics; GOOD/ACCEPTABLE/POOR/
+    UNUSABLE grading; warnings)
+  - tests/test_quality.py (12 tests)
+- **API Changes:** none
+- **Database Changes:** none
+- **Tests:** 89 passed (77 + 12 new), 169s
+- **Decisions:** worst-metric-wins grading; POOR stays usable (OCR runs with a
+  warning); UNUSABLE == blank/no structure, usable=False; blur threshold from
+  OCR_BLUR_THRESHOLD, brightness bands from OCR_BRIGHTNESS_LOW/HIGH; contrast
+  bands are module constants pending Phase 15 calibration; original image never
+  modified
+- **Limitations:** global (not per-region) blur; no angle/perspective measure;
+  contrast bands uncalibrated against real photos until Phase 15
+- **Next Phase:** Rebuild Phase 3 - Baseline Preprocessing
+
+## Rebuild Phase 3: Baseline Preprocessing
+- **Status:** COMPLETED (module + tests; not yet wired into live pipeline)
+- **Date:** 2026-09-03
+- **Files Created / Existing:**
+  - app/services/image/preprocessing.py (existing, Phase 3 baseline: decode →
+    resize → grayscale → denoise → CLAHE → deskew/threshold; original never
+    modified; bbox_to_original coordinate mapping)
+  - tests/test_preprocessing.py (16 tests, existing)
+- **Wiring:** the module is complete and tested. It is now wired in via the
+  Phase 13 orchestrator (app/services/analysis/ocr_pipeline.py) and supersedes
+  the old ``image_service.preprocess()`` 6-variant system (audit finding P16).
+- **Tests:** engine-level (image/) verified within full suite.
+- **Next Phase:** Rebuild Phase 4 - EasyOCR engine
+
+## Rebuild Phase 4: EasyOCR Engine
+- **Status:** COMPLETED (single-pass engine; not yet wired into live pipeline)
+- **Date:** 2026-09-03
+- **Files Created:**
+  - app/services/ocr/__init__.py
+  - app/services/ocr/engine.py (run_ocr single pass, lazy singleton reader,
+    image_id-aware evidence blocks, raw/normalized text, OCR_NO_TEXT / OCR_FAILED)
+  - tests/test_ocr_engine.py (10 tests)
+- **Decisions:**
+  - Single EasyOCR pass over one preprocessed grayscale image — removes the
+    old 6-variant / 3-pass fusion (audit P1, P16) until a golden dataset
+    proves an extra operation helps (Phase 15).
+  - Blocks are evidence-first: carry image_id, raw_text, normalized_text,
+    confidence, bbox, engine. Full traceability.
+  - Blank/empty OCR output → OCRNoTextError(OCR_NO_TEXT); corrupt/empty input
+    → OCREngineError(OCR_FAILED). Callers handle per-image isolation (Phase 13).
+  - Reader stays a module-level lazy singleton (moved from ocr_service.py).
+- **Wire-in:** wired into the live ``/run`` and ``/ocr`` paths via the Phase 13
+  orchestrator (ocr_pipeline.py), which calls ``ocr/engine.run_ocr`` instead of
+  ``ocr_service.run_ocr``. The legacy ``ocr_service`` remains for backward
+  compatibility but is superseded by the engine path.
+- **Tests:** 116 passed (106 baseline + 10 new engine tests), ~2m
+- **Next Phase:** Rebuild Phase 5 - OCR normalization
+
+## Rebuild Phase 5: OCR Normalization
+- **Status:** COMPLETED
+- **Date:** 2026-09-03
+- **Files Created:**
+  - app/services/ocr/normalizer.py (NormalizedBlock, normalize(), normalize_blocks())
+  - covered by tests/test_ocr_engine_phases.py (whitespace collapse, noise stripping)
+- **Decisions:** raw_text kept verbatim; normalized_text non-destructive; never fabricates
+- **Next Phase:** Rebuild Phase 6 - Text line reconstruction
+
+## Rebuild Phase 6: Text Line Reconstruction
+- **Status:** COMPLETED
+- **Date:** 2026-09-03
+- **Files Created:** app/services/ocr/line_builder.py (TextLine, build_lines, join_lines, sort_lines_by_top)
+- **Decisions:** vertical-center band grouping + left-to-right ordering; keeps block provenance in each line
+- **Next Phase:** Rebuild Phase 7 - Deterministic field extraction
+
+## Rebuild Phase 7: Deterministic Field Extraction
+- **Status:** COMPLETED
+- **Date:** 2026-09-03
+- **Files Created:** app/services/extraction/fields.py (extract_fields over reconstructed lines, evidence-aware)
+- **Decisions:** regexes ported from extraction_service.py (with re.MULTILINE for manufacturer/address per legacy);
+  every field carries image_id/bbox/status; net-quantity label-without-value → UNCERTAIN
+- **Next Phase:** Rebuild Phase 8 - Field normalization
+
+## Rebuild Phase 8: Field Normalization
+- **Status:** COMPLETED
+- **Date:** 2026-09-03
+- **Files Created:** app/services/extraction/normalizer.py (canonical_unit, normalize_quantity, parse_number, strip_currency, is_price_context, normalize_due_date)
+- **Decisions:** kg→g (×1000), l→ml (×1000); unknown units never scaled (no invented data)
+
+## Rebuild Phase 9: Evidence + Confidence
+- **Status:** COMPLETED
+- **Date:** 2026-09-03
+- **Files Created:**
+  - app/services/extraction/evidence.py (FieldStatus enum, FieldEvidence, FieldCollection)
+  - app/services/extraction/confidence.py (combine = ocr_confidence × extraction_confidence; field_status)
+- **Decisions:** field confidence = OCR conf × extractor conf (cap 0.95); DETECTED/UNCERTAIN/MISSING/CONFLICTING
+
+## Rebuild Phases 10 & 11: Multi-Image Merge + Conflict Detection
+- **Status:** COMPLETED
+- **Date:** 2026-09-03
+- **Files Created:** app/services/analysis/evidence_merger.py (merge_collections, resolve_conflicts)
+- **Decisions:** per-image collections merged per field; scalar fields with differing normalized values → CONFLICTING; UNCERTAIN ev/sec preserved
+
+## Rebuild Phase 12: Debug Visualization
+- **Status:** COMPLETED
+- **Date:** 2026-09-03
+- **Files Created:** app/services/ocr/visualization.py (draw_ocr_boxes)
+- **Decisions:** writes PNG under OCR_DEBUG_DIR only when OCR_ENABLE_DEBUG=True; never affects evidence
+
+## Rebuild Phase 13: End-to-End Orchestrator + Wiring
+- **Status:** COMPLETED
+- **Date:** 2026-09-03
+- **Files Created:**
+  - app/services/analysis/ocr_pipeline.py (run_pipeline orchestrator)
+- **Files Modified:** app/services/compliance_service.py (uses new pipeline), app/api/analysis.py (/ocr uses orchestrator — duplicate loop removed)
+- **Decisions:** validate → quality → preprocess → single-pass OCR → normalize → line build → extract → merge/conflict;
+  per-image failure isolation (one bad image never aborts); persists OCRResult + source-image-aware ExtractedField rows
+- **Tests:** 146 passed (was 116; +26 phase unit tests + 4 pipeline/e2e + golden)
+
+## Rebuild Phase 14: Performance Measurement
+- **Status:** COMPLETED
+- **Date:** 2026-09-03
+- **Files Created:** per-stage timings in ocr_pipeline.PipelineOutput.timings (processing/ocr/line/extraction/total per image)
+- **Decisions:** stage timing recorded per image; reader is a module singleton (loaded once)
+
+## Rebuild Phase 15: Golden Dataset Evaluation
+- **Status:** COMPLETED
+- **Date:** 2026-09-03
+- **Files Created:**
+  - tests/fixtures/ocr/expected/fields.json (ground-truth expected fields for tea/salt/biscuits fixtures)
+  - scripts/evaluate_golden.py (evaluation harness: per-fixture, per-field accuracy)
+  - tests/test_extraction_evidence.py::test_golden_dataset_extraction_accuracy
+- **Results:** deterministic extraction layer = **100%** accuracy on the golden dataset (honest ground truth;
+  OCR itself remains measured separately on real photos and is non-deterministic)
+- **Next Phase:** none — engine rebuild COMPLETE

@@ -92,6 +92,82 @@ tests/
 14 passed
 ```
 
+## Current State (OCR Engine Rebuild, Phases 1–15 — COMPLETE)
+
+```
+146 passed in ~1.5 min
+```
+
+- 116 prior tests + 30 new tests covering the rebuilt engine:
+  - `tests/test_ocr_engine.py` (10) — single-pass engine evidence contract
+  - `tests/test_ocr_engine_phases.py` (8) — normalizer, line_builder, visualization
+  - `tests/test_extraction_evidence.py` (13) — fields, normalizer, confidence, merger, golden
+  - `tests/test_pipeline_evidence.py` (3) — end-to-end pipeline via /run, DB persistence, evidence
+- The OCR/DB integration tests run EasyOCR on synthetic fixtures, so a full
+  run takes ~1.5–2 minutes (model cached after the first load).
+
+### Golden dataset evaluation (Phase 15)
+
+Deterministic field-extraction accuracy on the golden dataset
+(`tests/fixtures/ocr/expected/fields.json`) is **100%**. OCR itself is
+non-deterministic and measured separately on real photos.
+
+```bash
+python -m scripts.evaluate_golden
+```
+
+### Pytest discovery note (Windows)
+
+`testpaths = ["tests"]` is set in `pyproject.toml`. The root-level
+`test_images.py` is a **standalone dev script, not a pytest module** —
+importing it replaces `sys.stdout`/`sys.stderr` on Windows and crashes
+pytest's capture plugin (`ValueError: I/O operation on closed file`). Run it
+directly instead:
+
+```bash
+python test_images.py
+```
+
+### Phase 1 test additions
+
+| Concern | File |
+|---------|------|
+| Valid image metadata, valid PNG | tests/test_image_validator.py |
+| Empty payload → INVALID_IMAGE | tests/test_image_validator.py |
+| Non-image / truncated image → IMAGE_DECODE_FAILED | tests/test_image_validator.py |
+| Oversize → IMAGE_TOO_LARGE | tests/test_image_validator.py |
+| Unsupported format → INVALID_IMAGE | tests/test_image_validator.py |
+| Tiny image → IMAGE_TOO_SMALL | tests/test_image_validator.py |
+| File-path validation (missing/corrupt/valid) | tests/test_image_validator.py |
+| image_service backward-compat delegation | tests/test_image_validator.py |
+
+### Phase 2 test additions
+
+Synthesized OpenCV images — each quality metric tested in isolation:
+
+| Concern | File |
+|---------|------|
+| Sharp high-contrast label → GOOD, empty warnings | tests/test_quality.py |
+| to_dict shape / megapixels | tests/test_quality.py |
+| assess_bytes on a real fixture | tests/test_quality.py |
+| BGR input accepted | tests/test_quality.py |
+| Gaussian-blurred → downgraded + warning | tests/test_quality.py |
+| Dark image → downgraded + warning | tests/test_quality.py |
+| Overexposed → downgraded + warning | tests/test_quality.py |
+| Low contrast → downgraded + warning | tests/test_quality.py |
+| Uniform blank image → UNUSABLE, usable=False | tests/test_quality.py |
+| Tiny but sharp image → POOR (resolution warning), still usable | tests/test_quality.py |
+
+### Phases 4–15 test additions (engine rebuild)
+
+| Concern | File |
+|---------|------|
+| Single-pass engine block contract, raw/normalized, OCR_NO_TEXT, reader singleton | tests/test_ocr_engine.py |
+| Normalizer whitespace/noise, line reconstruction grouping/ordering, visualization | tests/test_ocr_engine_phases.py |
+| Fields (MRP/net-qty/batch/country/commodity), normalizer units, confidence, merger conflict | tests/test_extraction_evidence.py |
+| Golden-dataset extraction accuracy (≥80% asserted) | tests/test_extraction_evidence.py |
+| End-to-end /run pipeline → evidence, DB persistence w/ source_image, timings | tests/test_pipeline_evidence.py |
+
 ## Testing Convention
 
 Every service must have unit tests.

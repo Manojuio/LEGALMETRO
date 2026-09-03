@@ -44,10 +44,45 @@ def test_register_consumer(client):
     assert r.json()["role"] == "CONSUMER"
 
 
-def test_register_elevated_role_forbidden(client):
+def test_register_lmo_allowed(client, client_factory):
+    import uuid
+    # Create a zone as admin, then register an LMO into it.
+    admin = client_factory("admin@example.com", "admin123")
+    zone_name = f"Zone-{uuid.uuid4().hex[:6]}"
+    zr = admin.post("/api/v1/zones", params={"name": zone_name, "jurisdiction": "Test"})
+    assert zr.status_code == 201, zr.text
+    zone_id = zr.json()["id"]
+
+    email = f"newlmo{uuid.uuid4().hex[:8]}@example.com"
     r = client.post(
         "/api/v1/auth/register",
-        json={"email": "hacker@example.com", "password": "pass123", "full_name": "H", "role": "LMO"},
+        json={
+            "email": email,
+            "password": "pass123",
+            "full_name": "New LMO",
+            "role": "LMO",
+            "zone_id": zone_id,
+        },
+    )
+    assert r.status_code == 201
+    assert r.json()["role"] == "LMO"
+    assert r.json()["zone_id"] == zone_id
+
+
+def test_register_lmo_requires_zone(client):
+    import uuid
+    email = f"nolmo{uuid.uuid4().hex[:8]}@example.com"
+    r = client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "pass123", "full_name": "No Zone", "role": "LMO"},
+    )
+    assert r.status_code == 422
+
+
+def test_register_admin_forbidden(client):
+    r = client.post(
+        "/api/v1/auth/register",
+        json={"email": "hacker@example.com", "password": "pass123", "full_name": "H", "role": "ADMIN"},
     )
     assert r.status_code == 403
 
@@ -226,3 +261,69 @@ def test_analysis_ownership_enforced(client_factory):
     # other one's analysis via a direct fetch/run.
     run = other_client.post(f"/api/v1/analyses/{analysis_id}/run")
     assert run.status_code == 403
+
+
+# --- Admin transparency: sees LMO analyses by zone --------------------------
+
+
+def test_admin_sees_only_lmo_analyses(client, client_factory):
+    import uuid
+
+    # Zone for the LMO to register into.
+    admin = client_factory("admin@example.com", "admin123")
+    zone_name = f"AnaZone-{uuid.uuid4().hex[:6]}"
+    zr = admin.post("/api/v1/zones", params={"name": zone_name})
+    assert zr.status_code == 201, zr.text
+    zone_id = zr.json()["id"]
+
+    # Register + log in a fresh LMO in that zone.
+    lmo_email = f"anlmo{uuid.uuid4().hex[:8]}@example.com"
+    rr = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": lmo_email,
+            "password": "lmo123",
+            "full_name": "Zone LMO",
+            "role": "LMO",
+            "zone_id": zone_id,
+        },
+    )
+    assert rr.status_code == 201, rr.text
+    lmo = client_factory(lmo_email, "lmo123")
+    lmo_analysis_id = lmo.post("/api/v1/analyses", data={"category": "FOOD"}).json()["analysis_id"]
+
+    # A manufacturer creates another analysis that admin must NOT see.
+    mfr = client_factory("manufacturer@example.com", "mfr123")
+    mfr_analysis_id = mfr.post("/api/v1/analyses", data={"category": "BEVERAGE"}).json()["analysis_id"]
+
+    admin_analyses = admin.get("/api/v1/analyses")
+    assert admin_analyses.status_code == 200
+    by_id = {a["id"]: a for a in admin_analyses.json()}
+
+    assert lmo_analysis_id in by_id
+    assert by_id[lmo_analysis_id]["owner"]["role"] == "LMO"
+    assert by_id[lmo_analysis_id]["owner"]["zone_name"] == zone_name
+
+    # Admin must NOT see the manufacturer's analysis.
+    assert mfr_analysis_id not in by_id
+
+
+def test_admin_cannot_run_or_create_analyses(client, client_factory):
+    import uuid
+
+    admin = client_factory("admin@example.com", "admin123")
+    mfr = client_factory("manufacturer@example.com", "mfr123")
+
+    # Admin cannot create a new analysis.
+    created = admin.post("/api/v1/analyses", data={"category": "FOOD"})
+    assert created.status_code == 403
+
+    # Admin cannot run the full pipeline on an analysis either.
+    analysis_id = mfr.post("/api/v1/analyses", data={"category": "FOOD"}).json()["analysis_id"]
+    run = admin.post(f"/api/v1/analyses/{analysis_id}/run")
+    assert run.status_code == 403
+
+    # Admin can still fetch the generated report (read-only transparency).
+    report = admin.get(f"/api/v1/analyses/{analysis_id}/report")
+    # No results yet on a fresh run-less analysis -> reflects "no results" state.
+    assert report.status_code in (200, 400)

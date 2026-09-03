@@ -48,6 +48,7 @@ export const api = {
   me: () => request('/auth/me'),
   dashboard: () => request('/dashboard/summary'),
   zones: () => request('/zones'),
+  zonesAvailable: () => request('/zones/public'),
   createZone: ({ name, jurisdiction }) => {
     const qs = new URLSearchParams()
     qs.set('name', name)

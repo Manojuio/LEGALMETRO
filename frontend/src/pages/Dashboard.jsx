@@ -2,14 +2,20 @@ import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
+import { roleConfig } from '../config/roles'
 
-function Stat({ label, value }) {
+function StatCard({ icon, label, value, tone }) {
   return (
-    <div className="stat">
+    <div className={`stat-card ${tone || ''}`}>
+      <span className="stat-icon">{icon}</span>
       <div className="stat-value">{value ?? '—'}</div>
       <div className="stat-label">{label}</div>
     </div>
   )
+}
+
+function statusClass(s) {
+  return (s || '').toLowerCase()
 }
 
 export default function Dashboard() {
@@ -17,22 +23,28 @@ export default function Dashboard() {
   const [data, setData] = useState(null)
   const [analyses, setAnalyses] = useState([])
   const [inspections, setInspections] = useState([])
+  const [lmoAnalyses, setLmoAnalyses] = useState([])
   const [error, setError] = useState('')
 
   useEffect(() => {
     async function load() {
       try {
-        const [d, a] = await Promise.all([
-          api.dashboard(),
-          api.analyses(),
-        ])
+        const d = await api.dashboard()
         setData(d)
-        setAnalyses(a)
+        if (user.role !== 'ADMIN') {
+          const a = await api.analyses()
+          setAnalyses(a || [])
+        }
+        if (user.role === 'ADMIN') {
+          // Track LMO efforts for a quick transparency counter.
+          const lmoAnas = await api.analyses()
+          setLmoAnalyses(lmoAnas || [])
+        }
         let insp = []
-        if (user.role === 'ADMIN' || user.role === 'LMO') {
+        if (user.role === 'LMO') {
           insp = await api.inspections()
         }
-        setInspections(insp)
+        setInspections(insp || [])
       } catch (err) {
         setError(err.message)
       }
@@ -41,71 +53,101 @@ export default function Dashboard() {
   }, [user.role])
 
   const role = user.role
+  const cfg = roleConfig(role)
   const stats = data?.stats || {}
+  const isAdmin = role === 'ADMIN'
 
   return (
-    <div>
-      <h2>Dashboard</h2>
+    <div className="dash">
+      <div className="dash-hero">
+        <div className="dash-hero-avatar">{cfg.icon}</div>
+        <div>
+          <h1>Welcome, {user?.full_name?.split(' ')[0]}</h1>
+          <p>{cfg.tagline}</p>
+        </div>
+        {!isAdmin && <Link to="/analyze" className="primary hero-cta">+ New Analysis</Link>}
+      </div>
+
       {error && <div className="alert error">{error}</div>}
 
-      <div className="stats-row">
+      <div className="stats-grid">
         {role === 'ADMIN' && <>
-          <Stat label="Total Users" value={stats.total_users} />
-          <Stat label="LMOs" value={stats.lmos} />
-          <Stat label="Manufacturers" value={stats.manufacturers} />
-          <Stat label="Consumers" value={stats.consumers} />
-          <Stat label="Zones" value={stats.zones} />
-          <Stat label="Total Analyses" value={stats.total_analyses} />
+          <StatCard icon="⚖️" label="LMOs" value={stats.lmos} tone="tone-violet" />
+          <StatCard icon="🗂️" label="Zones" value={stats.zones} tone="tone-sky" />
+          <StatCard icon="📋" label="LMO Analyses" value={lmoAnalyses.length} tone="tone-blue" />
         </>}
         {role === 'LMO' && <>
-          <Stat label="My Inspections" value={stats.my_inspections} />
-          <Stat label="Pending" value={stats.pending_inspections} />
-          <Stat label="All Analyses" value={stats.total_analyses} />
+          <StatCard icon="🔎" label="My Inspections" value={stats.my_inspections} tone="tone-violet" />
+          <StatCard icon="⏳" label="Pending" value={stats.pending_inspections} tone="tone-amber" />
+          <StatCard icon="📋" label="All Analyses" value={stats.total_analyses} tone="tone-blue" />
         </>}
         {role === 'MANUFACTURER' && <>
-          <Stat label="My Products" value={stats.my_products} />
-          <Stat label="My Analyses" value={stats.my_analyses} />
+          <StatCard icon="📦" label="My Products" value={stats.my_products} tone="tone-amber" />
+          <StatCard icon="📋" label="My Analyses" value={stats.my_analyses} tone="tone-blue" />
         </>}
         {(role === 'RETAILER' || role === 'CONSUMER') && <>
-          <Stat label="My Analyses" value={stats.my_analyses} />
+          <StatCard icon="📋" label="My Analyses" value={stats.my_analyses} tone="tone-green" />
         </>}
       </div>
 
       {role === 'ADMIN' && data?.lmos_by_zone && (
-        <section className="card">
-          <h3>Legal Metrology Officers by Zone</h3>
-          {data.lmos_by_zone.length === 0 && <p className="muted">No LMOs assigned to zones yet. Use the Admin page.</p>}
-          <table>
-            <thead>
-              <tr><th>Zone</th><th>Jurisdiction</th><th>LMO</th><th>Email</th></tr>
-            </thead>
-            <tbody>
-              {data.lmos_by_zone.map((g) =>
-                g.lmos.map((lmo) => (
-                  <tr key={lmo.id}>
-                    <td>{g.zone.name}</td>
-                    <td>{g.zone.jurisdiction || '—'}</td>
-                    <td>{lmo.name}</td>
-                    <td>{lmo.email}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <section className="panel">
+          <h3 className="panel-title">Legal Metrology Officers by Zone</h3>
+          {data.lmos_by_zone.length === 0 && (
+            <p className="muted">No LMOs assigned to zones yet. <Link to="/admin">Assign zones →</Link></p>
+          )}
+          <div className="zone-cards">
+            {data.lmos_by_zone.map((g) => (
+              <div className="zone-card" key={g.zone.id}>
+                <div className="zone-head">
+                  <strong>{g.zone.name}</strong>
+                  <span className="muted">{g.zone.jurisdiction || 'Jurisdiction not set'}</span>
+                </div>
+                {g.lmos.map((lmo) => (
+                  <div className="zone-lmo" key={lmo.id}>
+                    <span className="role-avatar small">⚖️</span>
+                    <div>
+                      <strong>{lmo.name}</strong>
+                      <span className="muted small">{lmo.email}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {role === 'ADMIN' && (
+        <section className="panel">
+          <div className="panel-head">
+            <h3 className="panel-title">LMO Compliance Work</h3>
+            <Link to="/admin-analyses" className="primary small">View all →</Link>
+          </div>
+          <p className="muted">
+            Review the compliance analyses performed by Legal Metrology
+            Officers across your zones ({lmoAnalyses.length} total).
+          </p>
+          <div className="row">
+            <Link to="/admin-analyses" className="secondary">Open LMO Analyses</Link>
+          </div>
         </section>
       )}
 
       {role === 'LMO' && inspections.length > 0 && (
-        <section className="card">
-          <h3>My Inspections</h3>
-          <table>
-            <thead><tr><th>ID</th><th>Location</th><th>Status</th></tr></thead>
+        <section className="panel">
+          <div className="panel-head">
+            <h3 className="panel-title">My Inspections</h3>
+            <Link to="/inspections" className="link">View all →</Link>
+          </div>
+          <table className="table">
+            <thead><tr><th>Analysis</th><th>Location</th><th>Status</th></tr></thead>
             <tbody>
-              {inspections.map((i) => (
+              {inspections.slice(0, 5).map((i) => (
                 <tr key={i.id}>
-                  <td className="mono">{i.analysis_id.slice(0, 8)}</td>
+                  <td className="mono">{i.analysis_id?.slice(0, 8)}</td>
                   <td>{i.location || '—'}</td>
-                  <td><span className={`badge ${i.status?.toLowerCase()}`}>{i.status}</span></td>
+                  <td><span className={`badge ${statusClass(i.status)}`}>{i.status}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -113,30 +155,38 @@ export default function Dashboard() {
         </section>
       )}
 
-      <section className="card">
-        <div className="row-between">
-          <h3>My Analyses</h3>
-          <Link className="primary small" to="/analyze">+ New Analysis</Link>
-        </div>
-        {analyses.length === 0 && <p className="muted">No analyses yet.</p>}
-        <table>
-          <thead><tr><th>ID</th><th>Category</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            {analyses.map((a) => (
-              <tr key={a.id}>
-                <td className="mono">{a.id.slice(0, 8)}</td>
-                <td>{a.category}</td>
-                <td>
-                  <span className={`badge ${(a.overall_status || a.status)?.toLowerCase()}`}>
-                    {a.overall_status || a.status}
-                  </span>
-                </td>
-                <td><Link to={`/analyses/${a.id}`}>Open</Link></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      {!isAdmin && (
+        <section className="panel">
+          <div className="panel-head">
+            <h3 className="panel-title">{role === 'MANUFACTURER' ? 'My Analyses' : 'Analyses'}</h3>
+            <Link to="/analyze" className="primary small">+ New Analysis</Link>
+          </div>
+          {analyses.length === 0 ? (
+            <div className="empty">
+              <p className="muted">No analyses yet. Start a new one to scan a product.</p>
+              <Link to="/analyze" className="primary">Start your first analysis</Link>
+            </div>
+          ) : (
+            <table className="table">
+              <thead><tr><th>ID</th><th>Category</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                {analyses.map((a) => (
+                  <tr key={a.id}>
+                    <td className="mono">{a.id.slice(0, 8)}</td>
+                    <td>{a.category || '—'}</td>
+                    <td>
+                      <span className={`badge ${statusClass(a.overall_status || a.status)}`}>
+                        {a.overall_status || a.status}
+                      </span>
+                    </td>
+                    <td><Link to={`/analyses/${a.id}`} className="link">Open →</Link></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
     </div>
   )
 }

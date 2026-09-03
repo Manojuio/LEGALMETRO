@@ -44,16 +44,28 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_MB: int = 10
     ALLOWED_IMAGE_TYPES: list[str] = ["image/jpeg", "image/png", "image/webp"]
 
-    # OCR
+    # OCR — Core
     OCR_LANGUAGE: list[str] = ["en"]
     OCR_GPU: bool = False
     OCR_MAX_IMAGE_DIM: int = 1800
-    OCR_DENOISE: bool = True
-    OCR_THRESHOLD: bool = True
-    # Blocks below this confidence are kept as evidence but EXCLUDED from the
-    # text that feeds extraction — prevents OCR noise masquerading as product
-    # data (e.g. logos read as text).
     OCR_MIN_CONFIDENCE: float = 0.25
+
+    # OCR — Preprocessing toggles (enable only when testing demonstrates benefit)
+    OCR_DENOISE: bool = True
+    OCR_ENABLE_DESKEW: bool = False
+    OCR_ENABLE_THRESHOLD: bool = False
+    OCR_ENABLE_CLAHE: bool = False
+
+    # OCR — Image quality
+    OCR_MIN_IMAGE_WIDTH: int = 200
+    OCR_MIN_IMAGE_HEIGHT: int = 200
+    OCR_BLUR_THRESHOLD: float = 100.0
+    OCR_BRIGHTNESS_LOW: float = 0.2
+    OCR_BRIGHTNESS_HIGH: float = 0.85
+
+    # OCR — Debug
+    OCR_ENABLE_DEBUG: bool = False
+    OCR_DEBUG_DIR: Path = Path("debug")
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

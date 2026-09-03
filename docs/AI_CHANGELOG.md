@@ -274,4 +274,108 @@ Result: 43 passed
 ### Human Verification
 Required: No for code. Yes for legal interpretation of rule scope.
 
+## 2026-09-03 — OCR Engine Rebuild Phase 1 (Image Validation)
+
+### Task
+Phase 1 of the OCR engine rebuild: create a dedicated image validation
+component with stable error codes and dimension checks; do not let corrupted
+or invalid images reach OCR.
+
+### Files Created
+- app/services/image/__init__.py
+- app/services/image/validator.py
+- tests/test_image_validator.py
+
+### Files Modified
+- app/services/image_service.py (validate_image_bytes delegates to the
+  validator; ImageValidationError re-exported)
+- pyproject.toml (pytest testpaths)
+- docs/OCR_ENGINE.md (created), docs/OCR_ENGINE_AUDIT.md,
+  docs/PHASE_STATUS.md, docs/TESTING.md, docs/AI_CHANGELOG.md
+
+### Important Implementation
+- validator.py: checks in order — empty → size limit → full Pillow decode →
+  format allow-list → dimension minimums; raises ImageValidationError with a
+  stable code (INVALID_IMAGE, IMAGE_DECODE_FAILED, IMAGE_TOO_LARGE,
+  IMAGE_TOO_SMALL, IMAGE_NOT_FOUND)
+- validate_image_file(path) entry point for stored uploads (file-exists check)
+- image_service.validate_image_bytes is now a thin delegation wrapper; the
+  exception class is re-exported so all existing callers/tests are unchanged
+
+### Why
+- The old validator lived inside image_service.py with no error codes and no
+  minimum-dimension check; tiny/corrupt images could flow to OCR
+- One source of truth for validation avoids drift between modules
+
+### AI-assisted
+Yes (code written by AI, reviewed against the audit findings)
+
+### Tests
+77 passed (65 existing + 12 new), 143s; the 12 new tests cover valid/empty/
+corrupt/oversized/unsupported/tiny images plus path-based validation and
+image_service backward compatibility
+
+### Result
+Corrupt and undersized images are now rejected with clear, stable error
+codes before they can reach OCR
+
+### Problems
+- Root-level test_images.py (dev script) was being collected by pytest and
+  crashed its capture plugin on Windows — fixed by setting
+  testpaths = ["tests"] in pyproject.toml
+
+### Human Verification
+Required: No.
+
+## 2026-09-03 — OCR Engine Rebuild Phase 2 (Image Quality Assessment)
+
+### Task
+Phase 2: assess image quality (resolution, blur, brightness, contrast) with
+deterministic OpenCV metrics and classify GOOD / ACCEPTABLE / POOR /
+UNUSABLE without silently rejecting borderline images.
+
+### Files Created
+- app/services/image/quality.py
+- tests/test_quality.py
+
+### Files Modified
+- docs/OCR_ENGINE.md, docs/PHASE_STATUS.md, docs/TESTING.md,
+  docs/AI_CHANGELOG.md
+
+### Important Implementation
+- assess(image) on BGR or grayscale ndarray; assess_bytes(data) convenience
+  (decodes via image_service.decode_to_cv2, which moves to preprocessing in
+  Phase 3)
+- Metrics: variance-of-Laplacian blur_score; mean-luminance brightness_score
+  (0..1); (P98−P2)/255 contrast_score
+- Grading: worst metric wins; blur bands relative to OCR_BLUR_THRESHOLD;
+  brightness bands from OCR_BRIGHTNESS_LOW/HIGH with hard floors; contrast
+  bands are module constants; resolution warning caps grade at POOR
+- POOR stays usable (OCR may run, result must carry the warning);
+  UNUSABLE (blank/no structure) sets usable=False
+
+### Why
+- The old pipeline had no quality stage at all — bad images flowed straight
+  into OCR and produced low-confidence garbage without any warning
+- Deterministic metrics only; no ML quality model
+
+### AI-assisted
+Yes (code written by AI, reviewed against the audit findings)
+
+### Tests
+89 passed (77 + 12 new quality tests), 169s
+
+### Result
+Every image now gets an evidence dict with grade, usable flag, metric
+scores, and warnings; borderline images warn instead of being silently
+rejected
+
+### Problems
+- Tiny-image test helper originally drew no content on a 60x80 canvas
+  (blank → UNUSABLE instead of isolating the resolution downgrade) — fixed
+  the test to draw a sharp rectangle so the POOR grade is purely
+  resolution-driven
+
+### Human Verification
+Required: No.
 

@@ -23,3 +23,9 @@ dependencies = [
     "sqlalchemy>=2.0.52",
     "uvicorn>=0.52.4",
 ]
+
+[tool.pytest.ini_options]
+# Only discover tests under tests/. The root-level test_images.py is a
+# standalone dev script, not a pytest module: importing it replaces
+# sys.stdout/sys.stderr on Windows, which crashes pytest's capture plugin.
+testpaths = ["tests"]

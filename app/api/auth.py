@@ -37,28 +37,40 @@ def register(
 ) -> UserOut:
     """Create a new user account.
 
-    Public registration defaults to the CONSUMER role. Elevated roles
-    (ADMIN/LMO/MANUFACTURER) must be assigned by an ADMIN afterwards.
+    Public self-service registration is allowed for CONSUMER, RETAILER,
+    MANUFACTURER and LMO. The ADMIN role is reserved and can only be
+    assigned by an existing administrator.
     """
     exists = db.query(User).filter(User.email == payload.email.lower()).first()
     if exists:
         raise HTTPException(status_code=409, detail="Email already registered")
 
-    # Only allow self-service registration as CONSUMER (or RETAILER).
-    # Other roles must be created by an ADMIN. Default to CONSUMER if an
-    # elevated role is requested without admin context.
     role = payload.role
-    if role in (UserRole.ADMIN, UserRole.LMO):
+    if role == UserRole.ADMIN:
         raise HTTPException(
             status_code=403,
-            detail="Elevated roles must be assigned by an administrator",
+            detail="The ADMIN role must be assigned by an administrator",
         )
+
+    # LMOs must register in a zone (their jurisdiction).
+    zone_id = payload.zone_id
+    if role == UserRole.LMO:
+        if not zone_id:
+            raise HTTPException(
+                status_code=422,
+                detail="An LMO must select a zone during registration",
+            )
+        if db.get(Zone, zone_id) is None:
+            raise HTTPException(status_code=404, detail="Zone not found")
+    else:
+        zone_id = None
 
     user = User(
         email=payload.email.lower(),
         full_name=payload.full_name,
         hashed_password=hash_password(payload.password),
         role=role,
+        zone_id=zone_id,
         is_active=True,
     )
     db.add(user)
@@ -102,6 +114,23 @@ def me(
 
 
 # --- Zone management (ADMIN only) -------------------------------------------
+
+
+@router.get(
+    "/zones/public",
+    response_model=list[ZoneOut],
+    tags=["auth"],
+    summary="List zones for LMO registration (public)",
+)
+def list_zones_public(
+    db: Session = Depends(get_db),
+) -> list[ZoneOut]:
+    """Return all zones (id + name) so an LMO can register in a zone.
+
+    Only exposes zone identity needed for registration, not privileged data.
+    """
+    zones = db.query(Zone).order_by(Zone.name).all()
+    return [ZoneOut.model_validate(z) for z in zones]
 
 
 @router.post(

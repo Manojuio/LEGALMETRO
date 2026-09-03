@@ -1,112 +1,133 @@
-# LegalMetro — Packaged Commodities Compliance Scanner
+# Legal Metrology - Packaged Commodities Compliance Scanner
 
-A **local** web application that analyzes photographs of packaged commodities and checks them for compliance with India's **Legal Metrology (Packaged Commodities) Rules, 2011**.
+OCR-based compliance scanner for Legal Metrology (Packaged Commodities) Rules, 2011.
 
-> **LegalMetro** is a prototype built for the Smart India Hackathon. It is a compliance **scanner and decision-support tool** — it does **not** perform physical weighing/testing and does **not** issue legal certification.
+## Prerequisites
 
-## What it does
+- **Python 3.11+**
+- **Node.js 18+**
+- **PostgreSQL 14+**
+- **uv** (Python package manager) — install from https://docs.astral.sh/uv/
 
-A user uploads photos of a product's packaging (front / back / side).
+## Quick Start
 
-```
-Image → Preprocess → OCR → Extract structured info → Classify product
-     → Determine applicable rules → Run deterministic compliance checks
-     → Run visual/CV checks → Generate evidence → PASS / FAIL / REVIEW
-```
-
-**Core principle:** OCR/CV are *evidence providers*. The **rule engine** makes the compliance decision using deterministic, auditable logic. No LLM is used for legal reasoning.
-
-## Tech stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React + Vite (planned) |
-| Backend | FastAPI (single backend — no Node.js) |
-| ORM | SQLAlchemy 2.x |
-| Validation | Pydantic / Pydantic Settings |
-| Database | PostgreSQL |
-| Auth | JWT (python-jose) + bcrypt |
-| OCR | EasyOCR |
-| Image | OpenCV + Pillow |
-| PDF | ReportLab (planned) |
-| Testing | Pytest + FastAPI TestClient |
-
-## Project status
-
-Phases 1–5 complete:
-
-- **Phase 1–2:** Project specification + legal rule registry (`rules/`)
-- **Phase 3–4:** High/low-level design + database schema (`docs/`)
-- **Phase 5:** FastAPI foundation — health endpoints, all 12 SQLAlchemy models, seeded demo data
-
-See `docs/PHASE_STATUS.md` and `docs/AI_CHANGELOG.md` for full details.
-
-## Getting started
-
-### Prerequisites
-
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/) (or pip)
-- Local PostgreSQL running on port 5432
-
-### Setup
+### 1. Clone the repo
 
 ```bash
-# 1. Install dependencies
+git clone https://github.com/Manojuio/LEGALMETRO.git
+cd LEGALMETRO
+```
+
+### 2. Setup PostgreSQL
+
+Create a database:
+
+```sql
+CREATE DATABASE compliance_scanner;
+```
+
+### 3. Configure environment
+
+Create a `.env` file in the project root:
+
+```
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_NAME=compliance_scanner
+DATABASE_USER=postgres
+DATABASE_PASSWORD=your_password
+DEBUG=false
+JWT_SECRET_KEY=dev-secret-change-in-production
+```
+
+### 4. Setup Backend
+
+```bash
 uv sync
+```
 
-# 2. Configure database connection
-#    Copy the values below into a `.env` file (gitignored):
-#    DATABASE_HOST=localhost
-#    DATABASE_PORT=5432
-#    DATABASE_NAME=compliance_scanner
-#    DATABASE_USER=postgres
-#    DATABASE_PASSWORD=your_password
+Initialize the database:
 
-# 3. Create the database
-psql -U postgres -c "CREATE DATABASE compliance_scanner;"
+```bash
+python -c "from app.database import engine, Base; Base.metadata.create_all(bind=engine)"
+```
 
-# 4. Seed demo data (5 users, 17 rules, 2 products, 2 analyses)
-python -m scripts.seed_db
+Seed an admin user:
 
-# 5. Run tests
-pytest
+```bash
+python -m app.auth.seed
+```
 
-# 6. Start the server
+Start the backend:
+
+```bash
 uvicorn app.main:app --reload
 ```
 
-### Demo users (created by the seed script)
+Backend runs at http://127.0.0.1:8000
 
-| Role | Email | Password |
-|------|-------|----------|
-| ADMIN | admin@example.com | admin123 |
-| LMO | lmo@example.com | lmo123 |
-| MANUFACTURER | manufacturer@example.com | mfr123 |
-| RETAILER | retailer@example.com | retail123 |
-| CONSUMER | consumer@example.com | consumer123 |
+### 5. Setup Frontend
 
-### Health endpoints
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-- `GET /health`
-- `GET /api/v1/health`
-- `GET /api/v1/health/ready` (checks DB connectivity)
-- `GET /api/v1/version`
+Frontend runs at http://localhost:5173
 
-Interactive API docs: `http://localhost:8000/docs`
+### 6. Login
 
-## Documentation
+- **Admin**: Register at http://localhost:5173/register or use seeded admin
+- **LMO**: Create an LMO account from the admin panel
 
-- `docs/ARCHITECTURE.md` — system design
-- `docs/LLD.md` — database schema
-- `docs/API.md` — endpoint documentation
-- `docs/ROLES.md` — roles and access matrix
-- `docs/RULE_SCOPE.md` — rule scope and automation levels
-- `docs/DATA_FLOW.md` — data flows (upload → OCR → compliance)
-- `docs/DECISIONS.md` — architectural decisions (AD-001+)
-- `docs/AI_CHANGELOG.md` — every AI-assisted change (auditable)
-- `docs/PHASE_STATUS.md` — phase-by-phase status
+## Project Structure
 
-## License
+```
+LEGALMETRO/
+├── app/
+│   ├── api/            # API routes (auth, analysis, products)
+│   ├── compliance/     # Rule engine, scoring, validators
+│   ├── models/         # SQLAlchemy models
+│   ├── services/       # OCR, extraction, image processing
+│   └── core/           # Config, database setup
+├── frontend/
+│   └── src/
+│       ├── pages/      # React pages (Dashboard, Analysis, etc.)
+│       ├── components/ # Reusable UI components
+│       └── utils/      # PDF generator, helpers
+├── rules/
+│   └── rules.json      # Legal Metrology compliance rules
+├── scripts/            # Utility scripts (clear_db, seed, etc.)
+└── tests/              # Backend tests
+```
 
-Prototype for educational/demonstration purposes.
+## Key Features
+
+- **OCR Processing**: EasyOCR + Tesseract with image preprocessing
+- **Field Extraction**: MRP, quantity, manufacturer, dates, etc.
+- **Compliance Scoring**: 4 key parameters + 6 supporting checks
+- **Rule Engine**: 17 Legal Metrology rules with automated validation
+- **PDF Reports**: Professional compliance reports (frontend-generated)
+- **Role-Based Access**: Admin, LMO, Inspector roles
+
+## Scoring
+
+| Score | Grade | Status |
+|-------|-------|--------|
+| 90+ | A+ | Excellent |
+| 75-89 | A | Satisfactory |
+| 60-74 | B | Needs Improvement |
+| 45-59 | C | Poor |
+| 30-44 | D | Critical |
+| <30 | F | Fail |
+
+## Reset Database
+
+```bash
+python scripts/clear_db.py
+```
+
+## API Documentation
+
+Once running, visit http://127.0.0.1:8000/docs for the Swagger UI.

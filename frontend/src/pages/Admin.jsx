@@ -6,16 +6,14 @@ export default function Admin() {
   const { user } = useAuth()
   const [zones, setZones] = useState([])
   const [lmos, setLmos] = useState([])
-  const [users, setUsers] = useState([])
   const [zoneName, setZoneName] = useState('')
   const [zoneJur, setZoneJur] = useState('')
   const [error, setError] = useState('')
 
   async function load() {
-    const [z, l, u] = await Promise.all([api.zones(), api.lmos(), api.listUsers()])
+    const [z, l] = await Promise.all([api.zones(), api.lmos()])
     setZones(z)
     setLmos(l)
-    setUsers(u)
   }
 
   useEffect(() => {
@@ -48,61 +46,57 @@ export default function Admin() {
 
   return (
     <div>
-      <h2>Admin — Zones & LMOs</h2>
+      <div className="page-head">
+        <div>
+          <h1>Zones & LMOs</h1>
+          <p className="muted">Manage zones and assign Legal Metrology Officers (LMOs) to them.</p>
+        </div>
+      </div>
+
       {error && <div className="alert error">{error}</div>}
 
-      <section className="card">
-        <h3>Create Zone</h3>
-        <form onSubmit={createZone} className="inline-form">
-          <input value={zoneName} onChange={(e) => setZoneName(e.target.value)} placeholder="Zone name" required />
-          <input value={zoneJur} onChange={(e) => setZoneJur(e.target.value)} placeholder="Jurisdiction (optional)" />
-          <button className="primary" type="submit">Add</button>
-        </form>
-      </section>
+      <div className="split">
+        <section className="panel">
+          <h3 className="panel-title">Create Zone</h3>
+          <form onSubmit={createZone} className="form-grid">
+            <label>Zone name
+              <input value={zoneName} onChange={(e) => setZoneName(e.target.value)} placeholder="e.g. North Delhi" required />
+            </label>
+            <label>Jurisdiction (optional)
+              <input value={zoneJur} onChange={(e) => setZoneJur(e.target.value)} placeholder="e.g. Zone 1" />
+            </label>
+            <div className="full">
+              <button className="primary" type="submit">+ Add zone</button>
+            </div>
+          </form>
+        </section>
 
-      <section className="card">
-        <h3>Assign LMOs to Zones</h3>
-        {lmos.length === 0 && <p className="muted">No LMOs found.</p>}
-        <table>
-          <thead><tr><th>LMO</th><th>Email</th><th>Zone</th></tr></thead>
-          <tbody>
-            {lmos.map((lmo) => (
-              <tr key={lmo.id}>
-                <td>{lmo.full_name}</td>
-                <td>{lmo.email}</td>
-                <td>
-                  <select
-                    value={lmo.zone_id || ''}
-                    onChange={(e) => assignZone(lmo.id, e.target.value)}
-                  >
-                    <option value="">— unassigned —</option>
-                    {zones.map((z) => (
-                      <option key={z.id} value={z.id}>{z.name}</option>
-                    ))}
-                  </select>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      <section className="card">
-        <h3>All Users</h3>
-        <table>
-          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Zone</th></tr></thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>{u.full_name}</td>
-                <td>{u.email}</td>
-                <td>{u.role}</td>
-                <td>{zones.find((z) => z.id === u.zone_id)?.name || '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+        <section className="panel">
+          <h3 className="panel-title">Assign LMOs to Zones</h3>
+          {lmos.length === 0 && <p className="muted">No LMOs registered yet. Users can self-register as an LMO.</p>}
+          <table className="table">
+            <thead><tr><th>LMO</th><th>Zone</th></tr></thead>
+            <tbody>
+              {lmos.map((lmo) => (
+                <tr key={lmo.id}>
+                  <td>
+                    <strong>{lmo.full_name}</strong>
+                    <span className="muted small">{lmo.email}</span>
+                  </td>
+                  <td>
+                    <select value={lmo.zone_id || ''} onChange={(e) => assignZone(lmo.id, e.target.value)}>
+                      <option value="">— unassigned —</option>
+                      {zones.map((z) => (
+                        <option key={z.id} value={z.id}>{z.name}</option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </div>
     </div>
   )
 }

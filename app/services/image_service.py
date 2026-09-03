@@ -12,7 +12,7 @@ can stay focused on text recognition.
 
 import io
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
@@ -20,10 +20,22 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from app.core.config import get_settings
+from app.services.image import validator as image_validator
+from app.services.image.validator import ImageValidationError
+
+# NOTE (Phase 1): image validation now lives in
+# app/services/image/validator.py (single source of truth, stable error
+# codes, dimension checks). ImageValidationError is re-exported here for
+# backward compatibility with existing callers and tests.
 
 
-class ImageValidationError(Exception):
-    """Raised when an uploaded file fails validation."""
+@dataclass
+class ImageVariant:
+    """One prepared representation of an image for OCR scoring/fusion."""
+
+    name: str
+    image: np.ndarray
+    description: str = ""
 
 
 @dataclass
@@ -31,57 +43,22 @@ class PreprocessedImage:
     """Result of preprocessing one image."""
 
     cv2_image: np.ndarray
-    grayscale: np.ndarray
+    grayscale: np.ndarray  # primary representation (clean grayscale)
     width: int
     height: int
     steps_applied: list[str]
+    variants: list = field(default_factory=list)  # list[ImageVariant]
     original_bytes: bytes | None = None
 
 
 def validate_image_bytes(data: bytes, filename: str | None = None) -> dict:
-    """Validate raw uploaded bytes.
+    """Validate raw image bytes (delegates to image/validator.py).
 
-    Returns metadata dict on success. Raises ImageValidationError on failure.
-    Checks, in order:
-    1. Non-empty payload
-    2. File size limit (from settings)
-    3. Decodable by Pillow (integrity / corruption)
-    4. Allowed MIME type
+    Kept as a thin wrapper so existing callers (save_upload, the upload
+    endpoint, tests) keep working unchanged. Raises ImageValidationError
+    (with a stable ``.code``) on failure.
     """
-    settings = get_settings()
-
-    if not data:
-        raise ImageValidationError("Uploaded file is empty")
-
-    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
-    if len(data) > max_bytes:
-        raise ImageValidationError(
-            f"File exceeds {settings.MAX_UPLOAD_SIZE_MB}MB limit"
-        )
-
-    # Decode with Pillow to verify the image isn't corrupt
-    try:
-        img = Image.open(io.BytesIO(data))
-        img.load()  # force full decode so corruption surfaces here
-    except Exception as exc:
-        raise ImageValidationError(f"Cannot read image: {exc}") from exc
-
-    mime_type = img.format and ("image/" + img.format.lower()) or ""
-    if mime_type not in settings.ALLOWED_IMAGE_TYPES:
-        allowed = ", ".join(settings.ALLOWED_IMAGE_TYPES)
-        raise ImageValidationError(
-            f"Unsupported image type '{mime_type}'. Allowed: {allowed}"
-        )
-
-    width, height = img.size
-    return {
-        "width": width,
-        "height": height,
-        "format": img.format,
-        "mime_type": mime_type,
-        "size_bytes": len(data),
-        "filename": filename or "upload.jpg",
-    }
+    return image_validator.validate_image_bytes(data, filename)
 
 
 def decode_to_cv2(data: bytes) -> np.ndarray:
@@ -151,18 +128,131 @@ def settings_path(relative: Path) -> Path:
     return Path.cwd() / relative
 
 
+def _estimate_skew_angle(gray: np.ndarray) -> float:
+    """Estimate text-sheet skew in degrees using Hough line transform.
+
+    Returns ~0 when no reliable angle is found (straight or no text).
+    """
+    h, w = gray.shape[:2]
+    small_h = max(480, int(h * 0.6))
+    if small_h >= h:
+        small = gray
+    else:
+        r = small_h / h
+        small = cv2.resize(gray, (int(w * r), small_h), interpolation=cv2.INTER_AREA)
+    thresh = cv2.threshold(small, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+    lines = cv2.HoughLinesP(thresh, 1, np.pi / 180, threshold=80, minLineLength=max(20, small.shape[1] // 12), maxLineGap=8)
+    if lines is None or len(lines) == 0:
+        return 0.0
+    lines = lines.reshape(-1, 4)
+    angles = []
+    for line in lines:
+        x1, y1, x2, y2 = (int(v) for v in line)
+        if abs(x2 - x1) < 3:  # ignore near-vertical lines
+            continue
+        deg = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+        angles.append(deg)
+    if not angles:
+        return 0.0
+    median_angle = float(np.median(angles))
+    # Only correct small / medium skew; leave near-90 (image rotated) for the model.
+    if abs(median_angle) < 0.4 or abs(median_angle) > 35:
+        return 0.0
+    return median_angle
+
+
+def _deskew(gray: np.ndarray, angle: float) -> np.ndarray:
+    h, w = gray.shape[:2]
+    center = (w / 2, h / 2)
+    rot = cv2.getRotationMatrix2D(center, angle, 1.0)
+    return cv2.warpAffine(
+        gray, rot, (w, h),
+        flags=cv2.INTER_CUBIC,
+        borderMode=cv2.BORDER_REPLICATE,
+    )
+
+
+def _clahe_enhance(gray: np.ndarray, clip: float = 2.0, tile: int = 8) -> np.ndarray:
+    """Contrast-Limited Adaptive Histogram Equalization.
+
+    Dynamic per-region contrast — the core OpenCV pattern for low-contrast /
+    photo-captured labels and small print. Far more robust than a single
+    fixed threshold because it adapts to local illumination gradients.
+    """
+    clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=(tile, tile))
+    return clahe.apply(gray)
+
+
+def _build_variants(gray: np.ndarray, steps: list[str]) -> list:
+    """Build a small set of image representations to OCR + fuse.
+
+    Strategy per image (dynamic):
+    - clean grayscale (baseline)
+    - CLAHE contrast-enhanced (low-contrast / camera photos)
+    - upscaled (tiny/small-print labels)
+    - Otsu binarized (clean high-contrast print, fallback)
+    - deskewed (rotated photos)
+    - inverted (dark-background, light-text labels)
+    """
+    h, w = gray.shape[:2]
+    mean_lum = float(np.mean(gray))
+    variants = []
+
+    variants.append(ImageVariant("gray", gray, "clean grayscale baseline"))
+    steps.append("v:gray")
+
+    # CLAHE contrast enhancement (adaptive local contrast)
+    clahe = _clahe_enhance(gray)
+    variants.append(ImageVariant("clahe", clahe, "CLAHE contrast enhanced"))
+    steps.append("v:clahe")
+
+    # Upscale small images so EasyOCR sees larger text
+    if max(h, w) < 1500:
+        scale = 2.0 if max(h, w) < 1100 else 1.5
+        up = cv2.resize(
+            gray, (int(w * scale), int(h * scale)),
+            interpolation=cv2.INTER_CUBIC,
+        )
+        variants.append(ImageVariant("upscaled", up, f"upscaled {scale:.1f}x"))
+        steps.append(f"v:upscaled:{scale:.1f}")
+
+    # Otsu binarization fallback for clean, high-contrast printed labels
+    otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
+    variants.append(ImageVariant("otsu", otsu, "Otsu binarized"))
+    steps.append("v:otsu")
+
+    # Deskew if there is measurable rotation
+    angle = _estimate_skew_angle(gray)
+    if angle:
+        variants.append(ImageVariant("deskew", _deskew(gray, angle), f"deskewed {angle:.1f}deg"))
+        steps.append(f"v:deskew:{angle:.1f}")
+
+    # Dark background with light text → invert so text is dark-on-light
+    if mean_lum < 90:
+        inv = cv2.bitwise_not(gray)
+        variants.append(ImageVariant("invert", inv, "inverted (dark bg)"))
+        steps.append("v:invert")
+
+    # De-duplicate variants that are byte-identical (e.g. CLAHE on an already
+    # contrast-balanced image). Compare actual pixel data, not coarse stats.
+    seen = set()
+    uniq = []
+    for v in variants:
+        marker = hash(v.image.tobytes())
+        if marker in seen:
+            continue
+        seen.add(marker)
+        uniq.append(v)
+    return uniq
+
+
 def preprocess(data: bytes) -> PreprocessedImage:
-    """Run the preprocessing pipeline on an image.
+    """Run the dynamic preprocessing pipeline on an image.
 
-    Steps (each recorded in steps_applied):
-    1. Decode with OpenCV (grayscale, EXIF-normalized)
-    2. Resize if larger than a max dimension (keeps aspect ratio)
-    3. Denoise (fastNlMeansDenoising)
-    4. Adaptive thresholding / contrast enhancement
-    5. Optionally deskew (skipped for now — limited value for photos)
-
-    Returns a PreprocessedImage with the raw color image plus the
-    prepared grayscale image for OCR.
+    Produces a set of OpenCV variants tuned to the specific image (contrast,
+    size, skew, background) and hands them to the OCR service, which fuses
+    the highest-quality recognition per region. This replaces the old
+    single fixed binarization that discarded text detail for EasyOCR.
     """
     settings = get_settings()
     cv2_img = decode_to_cv2(data)
@@ -180,17 +270,16 @@ def preprocess(data: bytes) -> PreprocessedImage:
 
     gray = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
 
+    # Mild denoise only if the image looks noisy (high variance); the heavy
+    # fastNlMeans filter blurred small-print text, so it is used sparingly.
     denoise = getattr(settings, "OCR_DENOISE", True)
     if denoise:
-        gray = cv2.fastNlMeansDenoising(gray, None, h=10, templateWindowSize=7, searchWindowSize=21)
-        steps.append("denoise")
+        variance = float(np.var(gray))
+        if variance > 2000:
+            gray = cv2.bilateralFilter(gray, 5, 50, 50)
+            steps.append("denoise:bilateral")
 
-    threshold = getattr(settings, "OCR_THRESHOLD", True)
-    if threshold:
-        gray = cv2.adaptiveThreshold(
-            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 9
-        )
-        steps.append("adaptive_threshold")
+    variants = _build_variants(gray, steps)
 
     h2, w2 = gray.shape[:2]
     return PreprocessedImage(
@@ -199,5 +288,6 @@ def preprocess(data: bytes) -> PreprocessedImage:
         width=w2,
         height=h2,
         steps_applied=steps,
+        variants=variants,
         original_bytes=data,
     )

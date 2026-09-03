@@ -1,41 +1,107 @@
-import React from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import React, { useEffect } from 'react'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { roleConfig } from '../config/roles'
 
-const ROLE_LABEL = {
-  ADMIN: 'Administrator',
-  LMO: 'Legal Metrology Officer',
-  MANUFACTURER: 'Manufacturer',
-  RETAILER: 'Retailer',
-  CONSUMER: 'Consumer',
+const ROLE_MENUS = {
+  ADMIN: [
+    { to: '/', label: 'Overview', icon: '📊', end: true },
+    { to: '/admin', label: 'Zones & LMOs', icon: '🗂️' },
+    { to: '/admin-analyses', label: 'LMO Analyses', icon: '📋' },
+  ],
+  LMO: [
+    { to: '/', label: 'Overview', icon: '📊', end: true },
+    { to: '/inspections', label: 'Inspections', icon: '🔎' },
+    { to: '/analyze', label: 'New Analysis', icon: '🔍' },
+    { to: '/analyses', label: 'All Analyses', icon: '📋' },
+  ],
+  MANUFACTURER: [
+    { to: '/', label: 'Overview', icon: '📊', end: true },
+    { to: '/products', label: 'My Products', icon: '📦' },
+    { to: '/analyze', label: 'New Analysis', icon: '🔍' },
+  ],
+  RETAILER: [
+    { to: '/', label: 'Overview', icon: '📊', end: true },
+    { to: '/products', label: 'Products', icon: '📦' },
+    { to: '/analyze', label: 'New Analysis', icon: '🔍' },
+  ],
+  CONSUMER: [
+    { to: '/', label: 'Overview', icon: '📊', end: true },
+    { to: '/analyze', label: 'New Analysis', icon: '🔍' },
+  ],
 }
 
 export default function Layout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const role = user?.role
+  const cfg = roleConfig(role)
+
+  useEffect(() => {
+    if (role) document.body.dataset.role = role
+  }, [role])
 
   function handleLogout() {
     logout()
     navigate('/login')
   }
 
+  const menu = ROLE_MENUS[role] || ROLE_MENUS.CONSUMER
+
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="brand">LegalMetro</div>
-        <nav className="nav">
-          <NavLink to="/" end>Dashboard</NavLink>
-          <NavLink to="/analyze">New Analysis</NavLink>
-          {user?.role === 'ADMIN' && <NavLink to="/admin">Admin</NavLink>}
-        </nav>
-        <div className="user">
-          <span className="role-badge">{ROLE_LABEL[user?.role] || user?.role}</span>
-          <span className="email">{user?.email}</span>
-          <button className="link-btn" onClick={handleLogout}>Logout</button>
+    <div className="app role-theme" data-role={role}>
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <span className="brand-mark">LM</span>
+          <div>
+            <div className="brand-name">LegalMetro</div>
+            <div className="brand-sub">Compliance Scanner</div>
+          </div>
         </div>
-      </header>
-      <main className="content">
-        <Outlet />
+
+        <div className="role-card">
+          <span className="role-avatar">{cfg.icon}</span>
+          <div className="role-meta">
+            <strong>{cfg.label}</strong>
+            <span className="role-tagline">{cfg.tagline}</span>
+          </div>
+        </div>
+
+        <nav className="side-nav">
+          {menu.map((item) => (
+            <NavLink
+              key={item.to + (item.label || '')}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) => (isActive ? 'active' : '')}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="user-mini">
+            <div className="user-avatar">{user?.full_name?.charAt(0) || 'U'}</div>
+            <div className="user-mini-meta">
+              <strong>{user?.full_name}</strong>
+              <span>{user?.email}</span>
+            </div>
+          </div>
+          <button className="logout-btn" onClick={handleLogout}>↪ Sign out</button>
+        </div>
+      </aside>
+
+      <main className="content-wrap">
+        <header className="mobile-bar">
+          <span className="brand-name">LegalMetro</span>
+          <button className="logout-btn" onClick={handleLogout}>Sign out</button>
+        </header>
+        <div className="page">
+          <Outlet />
+        </div>
       </main>
     </div>
   )
