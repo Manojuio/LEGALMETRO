@@ -190,22 +190,6 @@ export default function Dashboard() {
         </section>
       )}
 
-      {role === 'ADMIN' && (
-        <section className="panel">
-          <div className="panel-head">
-            <h3 className="panel-title">LMO Compliance Work</h3>
-            <Link to="/admin-analyses" className="primary small">View all →</Link>
-          </div>
-          <p className="muted">
-            Review every compliance analysis performed by Legal Metrology
-            Officers ({lmoAnalyses.length} total) and download their reports.
-          </p>
-          <div className="row">
-            <Link to="/admin-analyses" className="secondary">Open LMO Analyses</Link>
-          </div>
-        </section>
-      )}
-
       {role === 'LMO' && inspections.length > 0 && (
         <section className="panel">
           <div className="panel-head">
