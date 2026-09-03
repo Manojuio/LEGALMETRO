@@ -24,6 +24,8 @@ export default function Dashboard() {
   const [analyses, setAnalyses] = useState([])
   const [inspections, setInspections] = useState([])
   const [lmoAnalyses, setLmoAnalyses] = useState([])
+  const [selectedLmo, setSelectedLmo] = useState(null)
+  const [downloading, setDownloading] = useState(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -51,6 +53,18 @@ export default function Dashboard() {
     }
     load()
   }, [user.role])
+
+  async function downloadReport(id) {
+    setDownloading(id)
+    setError('')
+    try {
+      await api.downloadReport(id)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDownloading(null)
+    }
+  }
 
   const role = user.role
   const cfg = roleConfig(role)
@@ -91,23 +105,88 @@ export default function Dashboard() {
 
       {role === 'ADMIN' && data?.lmos && (
         <section className="panel">
-          <h3 className="panel-title">Legal Metrology Officers</h3>
-          {data.lmos.length === 0 && (
-            <p className="muted">No LMOs registered yet.</p>
-          )}
-          <div className="zone-cards">
-            {data.lmos.map((lmo) => (
-              <div className="zone-card" key={lmo.id}>
-                <div className="zone-lmo">
-                  <span className="role-avatar small">⚖️</span>
-                  <div>
-                    <strong>{lmo.name}</strong>
-                    <span className="muted small">{lmo.email}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="panel-head">
+            <h3 className="panel-title">Legal Metrology Officers</h3>
+            <span className="panel-count">{data.lmos.length} LMOs</span>
           </div>
+          {data.lmos.length === 0 ? (
+            <p className="muted">No LMOs registered yet.</p>
+          ) : (
+            <div className="lmo-reports-wrap">
+              <div className="lmo-list">
+                <table className="table">
+                  <thead>
+                    <tr><th>Officer</th><th>Reports</th></tr>
+                  </thead>
+                  <tbody>
+                    {data.lmos.map((lmo) => {
+                      const count = lmoAnalyses.filter((a) => a.owner?.user_id === lmo.id).length
+                      return (
+                        <tr
+                          key={lmo.id}
+                          className={selectedLmo?.id === lmo.id ? 'active' : ''}
+                          onClick={() => setSelectedLmo(lmo)}
+                        >
+                          <td>
+                            <span className="role-avatar small">⚖️</span>
+                            <span className="lmo-name">{lmo.name}</span>
+                          </td>
+                          <td className="muted small">{count}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="lmo-reports">
+                {!selectedLmo ? (
+                  <p className="muted">Select an LMO above to view and download their reports.</p>
+                ) : (
+                  <>
+                    <div className="lmo-reports-head">
+                      <strong>{selectedLmo.name}</strong>
+                      <span className="muted small">{selectedLmo.email}</span>
+                    </div>
+                    {(() => {
+                      const reports = lmoAnalyses.filter((a) => a.owner?.user_id === selectedLmo.id)
+                      return reports.length === 0 ? (
+                        <p className="muted">This LMO has not performed any analyses yet.</p>
+                      ) : (
+                        <table className="table">
+                          <thead>
+                            <tr><th>ID</th><th>Category</th><th>Status</th><th></th></tr>
+                          </thead>
+                          <tbody>
+                            {reports.map((a) => (
+                              <tr key={a.id}>
+                                <td className="mono">{a.id.slice(0, 8)}</td>
+                                <td>{a.category || '—'}</td>
+                                <td>
+                                  <span className={`badge ${statusClass(a.overall_status || a.status)}`}>
+                                    {a.overall_status || a.status}
+                                  </span>
+                                </td>
+                                <td>
+                                  <button
+                                    className="secondary small"
+                                    onClick={() => downloadReport(a.id)}
+                                    disabled={downloading === a.id || !a.overall_status}
+                                  >
+                                    {downloading === a.id ? 'Downloading…' : 'Download PDF'}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )
+                    })()}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -118,7 +197,7 @@ export default function Dashboard() {
             <Link to="/admin-analyses" className="primary small">View all →</Link>
           </div>
           <p className="muted">
-            Review the compliance analyses performed by Legal Metrology
+            Review every compliance analysis performed by Legal Metrology
             Officers ({lmoAnalyses.length} total) and download their reports.
           </p>
           <div className="row">

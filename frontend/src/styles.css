@@ -363,6 +363,17 @@ button.secondary:hover { background: #f1f5f9; }
 .row-actions { display: flex; align-items: center; gap: 10px; }
 button.secondary.small { padding: 5px 10px; font-size: 0.78rem; }
 
+.lmo-reports-wrap { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
+.lmo-list .table tbody tr { cursor: pointer; }
+.lmo-list .table tbody tr.active { background: var(--role-soft, #eef2f7); }
+.lmo-list .lmo-name { margin-left: 8px; font-weight: 600; }
+.lmo-reports { border-left: 1px solid var(--border); padding-left: 16px; }
+.lmo-reports-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+@media (max-width: 760px) {
+  .lmo-reports-wrap { grid-template-columns: 1fr; }
+  .lmo-reports { border-left: 0; padding-left: 0; margin-top: 12px; }
+}
+
 /* ------- Auth ------- */
 .auth-shell {
   min-height: 100vh;
