@@ -9,7 +9,6 @@ import Dashboard from './pages/Dashboard'
 import Analyze from './pages/Analyze'
 import Analyses from './pages/Analyses'
 import AnalysisDetail from './pages/AnalysisDetail'
-import Admin from './pages/Admin'
 import AdminAnalyses from './pages/AdminAnalyses'
 import Products from './pages/Products'
 import Inspections from './pages/Inspections'
@@ -57,14 +56,6 @@ function App() {
             />
             <Route path="/analyses" element={<Protected><Analyses /></Protected>} />
             <Route path="/analyses/:id" element={<Protected><AnalysisDetail /></Protected>} />
-            <Route
-              path="/admin"
-              element={
-                <Protected>
-                  <RoleGuard roles={['ADMIN']}><Admin /></RoleGuard>
-                </Protected>
-              }
-            />
             <Route
               path="/admin-analyses"
               element={
