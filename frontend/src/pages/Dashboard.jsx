@@ -23,25 +23,17 @@ export default function Dashboard() {
   const [data, setData] = useState(null)
   const [analyses, setAnalyses] = useState([])
   const [inspections, setInspections] = useState([])
-  const [lmoAnalyses, setLmoAnalyses] = useState([])
-  const [selectedLmo, setSelectedLmo] = useState(null)
-  const [downloading, setDownloading] = useState(null)
   const [error, setError] = useState('')
+  const [downloading, setDownloading] = useState(null)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     async function load() {
       try {
         const d = await api.dashboard()
         setData(d)
-        if (user.role !== 'ADMIN') {
-          const a = await api.analyses()
-          setAnalyses(a || [])
-        }
-        if (user.role === 'ADMIN') {
-          // Track LMO efforts for a quick transparency counter.
-          const lmoAnas = await api.analyses()
-          setLmoAnalyses(lmoAnas || [])
-        }
+        const a = await api.analyses()
+        setAnalyses(a || [])
         let insp = []
         if (user.role === 'LMO') {
           insp = await api.inspections()
@@ -71,6 +63,21 @@ export default function Dashboard() {
   const stats = data?.stats || {}
   const isAdmin = role === 'ADMIN'
 
+  // Derived compliance figures for the admin cockpit.
+  const passed = analyses.filter((a) => a.overall_status === 'PASS').length
+  const review = analyses.filter((a) => a.overall_status === 'REVIEW').length
+  const failed = analyses.filter((a) => a.overall_status === 'FAIL').length
+
+  const filteredAnalyses = analyses.filter((a) => {
+    if (!query) return true
+    const q = query.toLowerCase()
+    return (
+      a.category?.toLowerCase().includes(q) ||
+      a.owner?.name?.toLowerCase().includes(q) ||
+      (a.overall_status || '').toLowerCase().includes(q)
+    )
+  })
+
   return (
     <div className="dash">
       <div className="dash-hero">
@@ -86,8 +93,11 @@ export default function Dashboard() {
 
       <div className="stats-grid">
         {role === 'ADMIN' && <>
+          <StatCard icon="📋" label="Total Analyses" value={analyses.length} tone="tone-blue" />
           <StatCard icon="⚖️" label="LMOs" value={stats.lmos} tone="tone-violet" />
-          <StatCard icon="📋" label="LMO Analyses" value={lmoAnalyses.length} tone="tone-blue" />
+          <StatCard icon="✅" label="Passed" value={passed} tone="tone-green" />
+          <StatCard icon="⏳" label="Needs Review" value={review} tone="tone-amber" />
+          <StatCard icon="⛔" label="Failed" value={failed} tone="tone-rose" />
         </>}
         {role === 'LMO' && <>
           <StatCard icon="🔎" label="My Inspections" value={stats.my_inspections} tone="tone-violet" />
@@ -103,89 +113,58 @@ export default function Dashboard() {
         </>}
       </div>
 
-      {role === 'ADMIN' && data?.lmos && (
+      {role === 'ADMIN' && (
         <section className="panel">
           <div className="panel-head">
-            <h3 className="panel-title">Legal Metrology Officers</h3>
-            <span className="panel-count">{data.lmos.length} LMOs</span>
+            <h3 className="panel-title">LMO Compliance Analyses</h3>
+            <span className="panel-count">{analyses.length} analysis{analyses.length === 1 ? '' : 's'}</span>
           </div>
-          {data.lmos.length === 0 ? (
-            <p className="muted">No LMOs registered yet.</p>
-          ) : (
-            <div className="lmo-reports-wrap">
-              <div className="lmo-list">
-                <table className="table">
-                  <thead>
-                    <tr><th>Officer</th><th>Reports</th></tr>
-                  </thead>
-                  <tbody>
-                    {data.lmos.map((lmo) => {
-                      const count = lmoAnalyses.filter((a) => a.owner?.user_id === lmo.id).length
-                      return (
-                        <tr
-                          key={lmo.id}
-                          className={selectedLmo?.id === lmo.id ? 'active' : ''}
-                          onClick={() => setSelectedLmo(lmo)}
-                        >
-                          <td>
-                            <span className="role-avatar small">⚖️</span>
-                            <span className="lmo-name">{lmo.name}</span>
-                          </td>
-                          <td className="muted small">{count}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="lmo-reports">
-                {!selectedLmo ? (
-                  <p className="muted">Select an LMO above to view and download their reports.</p>
-                ) : (
-                  <>
-                    <div className="lmo-reports-head">
-                      <strong>{selectedLmo.name}</strong>
-                      <span className="muted small">{selectedLmo.email}</span>
-                    </div>
-                    {(() => {
-                      const reports = lmoAnalyses.filter((a) => a.owner?.user_id === selectedLmo.id)
-                      return reports.length === 0 ? (
-                        <p className="muted">This LMO has not performed any analyses yet.</p>
-                      ) : (
-                        <table className="table">
-                          <thead>
-                            <tr><th>ID</th><th>Category</th><th>Status</th><th></th></tr>
-                          </thead>
-                          <tbody>
-                            {reports.map((a) => (
-                              <tr key={a.id}>
-                                <td className="mono">{a.id.slice(0, 8)}</td>
-                                <td>{a.category || '—'}</td>
-                                <td>
-                                  <span className={`badge ${statusClass(a.overall_status || a.status)}`}>
-                                    {a.overall_status || a.status}
-                                  </span>
-                                </td>
-                                <td>
-                                  <button
-                                    className="secondary small"
-                                    onClick={() => downloadReport(a.id)}
-                                    disabled={downloading === a.id || !a.overall_status}
-                                  >
-                                    {downloading === a.id ? 'Downloading…' : 'Download PDF'}
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )
-                    })()}
-                  </>
-                )}
-              </div>
+          {analyses.length === 0 ? (
+            <div className="empty">
+              <p className="muted">No compliance analyses have been performed by LMOs yet. Reports will appear here as LMOs complete scans.</p>
+              <Link to="/admin-analyses" className="secondary">Open LMO Analyses</Link>
             </div>
+          ) : (
+            <>
+              <div className="toolbar">
+                <input
+                  className="search-input"
+                  placeholder="Search by product, LMO or status…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+                <Link to="/admin-analyses" className="link">Filter & manage →</Link>
+              </div>
+              <table className="table">
+                <thead>
+                  <tr><th>ID</th><th>Officer</th><th>Category</th><th>Status</th><th>Created</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {filteredAnalyses.map((a) => (
+                    <tr key={a.id}>
+                      <td className="mono">{a.id.slice(0, 8)}</td>
+                      <td>{a.owner?.name || '—'}</td>
+                      <td>{a.category || '—'}</td>
+                      <td>
+                        <span className={`badge ${statusClass(a.overall_status || a.status)}`}>
+                          {a.overall_status || a.status}
+                        </span>
+                      </td>
+                      <td className="muted small">{a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
+                      <td className="row-actions">
+                        <Link to={`/analyses/${a.id}`} className="link">Open →</Link>
+                        <button className="secondary small" onClick={() => downloadReport(a.id)} disabled={downloading === a.id || !a.overall_status}>
+                          {downloading === a.id ? 'Downloading…' : 'Download PDF'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredAnalyses.length === 0 && (
+                    <tr><td colSpan="6" className="muted">No analyses match your search.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </>
           )}
         </section>
       )}

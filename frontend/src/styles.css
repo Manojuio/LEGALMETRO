@@ -351,27 +351,43 @@ button.secondary:hover { background: #f1f5f9; }
 .stat-card.tone-sky { --accent: #0ea5e9; }
 .stat-card.tone-rose { --accent: #e11d48; }
 
-.zone-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
-.zone-card {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px;
-  background: #f8fafc;
-}
-.zone-lmo { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
-
 .row-actions { display: flex; align-items: center; gap: 10px; }
-button.secondary.small { padding: 5px 10px; font-size: 0.78rem; }
+button.secondary.small, a.secondary.small { padding: 5px 10px; font-size: 0.78rem; }
 
-.lmo-reports-wrap { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
-.lmo-list .table tbody tr { cursor: pointer; }
-.lmo-list .table tbody tr.active { background: var(--role-soft, #eef2f7); }
-.lmo-list .lmo-name { margin-left: 8px; font-weight: 600; }
-.lmo-reports { border-left: 1px solid var(--border); padding-left: 16px; }
-.lmo-reports-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+/* ------- Admin tools (toolbar, filters, summary chips) ------- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.toolbar .link { margin-left: auto; white-space: nowrap; }
+.search-input {
+  flex: 1 1 240px;
+  min-width: 200px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: #fff;
+  color: var(--text, #0f172a);
+}
+.search-input:focus { outline: 2px solid var(--role, var(--brand)); outline-offset: 0; }
+.select-inline {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: #fff;
+}
+.summary-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.summary-chips .chip { font-size: 0.82rem; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); background: #f8fafc; }
+.summary-chips .chip.green { color: #166534; background: #f0fdf4; border-color: #bbf7d0; }
+.summary-chips .chip.amber { color: #92400e; background: #fffbeb; border-color: #fde68a; }
+.summary-chips .chip.red { color: #991b1b; background: #fef2f2; border-color: #fecaca; }
 @media (max-width: 760px) {
-  .lmo-reports-wrap { grid-template-columns: 1fr; }
-  .lmo-reports { border-left: 0; padding-left: 0; margin-top: 12px; }
+  .toolbar .link { margin-left: 0; }
 }
 
 /* ------- Auth ------- */
@@ -720,14 +736,6 @@ button.secondary.small { padding: 5px 10px; font-size: 0.78rem; }
 .user-cell > div { display: flex; flex-direction: column; }
 .empty { text-align: center; padding: 36px 16px; }
 .empty .muted { display: block; margin-bottom: 14px; }
-
-/* ------- Admin LMO analyses ------- */.zone-ana-grid { display: flex; flex-direction: column; gap: 20px; }
-.zone-ana-grid .panel { margin-bottom: 0; }
-.lmo-ana-block { margin-top: 14px; }
-.lmo-ana-block + .lmo-ana-block { border-top: 1px solid var(--border); padding-top: 12px; }
-.lmo-ana-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-.lmo-ana-head strong { font-size: 0.92rem; }
-.lmo-ana-head .chip { margin-left: auto; }
 
 /* ------- Responsive ------- */
 @media (max-width: 820px) {
