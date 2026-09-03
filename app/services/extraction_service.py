@@ -15,7 +15,8 @@ compliance — it only produces structured evidence.
 import re
 from dataclasses import dataclass, field
 
-# Reward tokens that commonly appear after "MRP" and before the price
+# Reward tokens that commonly appear after "MRP" and before the price.
+# OCR frequently misreads the ₹ / Rs symbol as <, >, {, (, etc.
 _MRP_RES = [
     re.compile(r"\bMRP\s*(?:Rs\.?|INR|₹)?\s*:?\s*(\d+(?:\.\d+)?)", re.IGNORECASE),
     re.compile(r"\bMRP\s*(?:Rs\.?|INR|₹)\s*(\d+(?:\.\d+)?)", re.IGNORECASE),
@@ -23,6 +24,10 @@ _MRP_RES = [
     # OCR disfigurement of "MRP": "4VAP", "MRRP", "MRF" etc followed by Rs/₹
     re.compile(r"\bM{1,2}[RPI]{1,2}[PI]?\s*(?:Rs\.?|INR|₹)\s*:?\s*(\d+(?:\.\d+)?)", re.IGNORECASE),
     re.compile(r"\bMRP\s*[:\-]?\s*(?:Rs\.?|INR|₹)?\s*(\d+(?:\.\d+)?)\b", re.IGNORECASE),
+    # MRP followed by a stray symbol (OCR misread of ₹/Rs as < > { ( | etc.)
+    re.compile(r"\bMRP\s*[:\-]?[\s]*[<>{(\[\]\|`'\"~@#&*]+[\s]*(\d+(?:\.\d+)?)\b", re.IGNORECASE),
+    # "MRP Rs. 120" / "MRP: 120" / "M.R.P. 120"
+    re.compile(r"\bM\.?R\.?P\.?\s*:?\s*(?:Rs\.?|INR|₹)?\s*[<>{(\[\]\|`'\"~@#&*]*(\d+(?:\.\d+)?)\b", re.IGNORECASE),
 ]
 
 _UNIT_PATTERNS = {
@@ -193,7 +198,7 @@ def extract_typed_dates(text: str) -> dict:
     """
     result = {}
     label_map = {
-        "packing_date": [r"\b(?:packed|pack|packing|m\.?f\.?g|mfg\.?|manufactur|prod\.?|production)\b[^0-9]*(\d{1,2}[/\-.]\d{2,4}|\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}|[A-Za-z]{3,9}\s*\d{4})"],
+        "packing_date": [r"\b(?:packed|packing|pack\s*dt|m\.?f\.?g|mfg\.?|m\.?f\.?d\.?|manufactur|prod\.?|production)\b[^0-9A-Za-z]*(\d{1,2}[/\-.]\d{2,4}|\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}|[A-Za-z]{3,9}\s*\d{4})\b", r"\b(?:packed|packing|m\.?f\.?g|mfg\.?|m\.?f\.?d\.?)\b[^0-9A-Za-z]*(\d{1,2})\b"],
         "best_before_date": [r"\b(?:best\s*before|best-by|best by)\b[^0-9]*(\d{1,2}[/\-.]\d{2,4}|\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}|[A-Za-z]{3,9}\s*\d{4}|\d{1,2}\s*(?:month|days?|year)s?\s*(?:from|of))"],
         "expiry_date": [r"\b(?:expiry|exp\.?|expires?\s*on|use\s*by)\b[^0-9]*(\d{1,2}[/\-.]\d{2,4}|\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}|[A-Za-z]{3,9}\s*\d{4})"],
     }
@@ -258,6 +263,23 @@ def extract_manufacturer_name(text: str) -> ExtractedField | None:
             field_name="manufacturer_name",
             value=name,
             confidence=0.85,
+            source_text=m.group(0),
+        )
+    # "Manufactured by:" sits alone at end of line; the company name follows on
+    # the NEXT line ("...:\nFreshGlow Products Pvt. Ltd."). Capture the next line.
+    m = re.search(
+        r"\b(?:mfd\.?\s*by|manufactur(?:ed|er)\s*[:\-]?\s*by|pack(?:ed|er)?\s*[:\-]?\s*by|marketed\s*by)\s*:?\s*\n\s*([A-Z][^\n]+)",
+        text, re.IGNORECASE | re.MULTILINE,
+    )
+    if m:
+        name = m.group(1).strip()
+        # strip leading company suffix ambiguities and trailing punctuation
+        name = re.split(r"\s*(?:plot|industrial\s+area|near|road|street)\b", name, flags=re.IGNORECASE)[0].strip()
+        name = name.rstrip(":;,._ ")
+        return ExtractedField(
+            field_name="manufacturer_name",
+            value=name,
+            confidence=0.8,
             source_text=m.group(0),
         )
     return None

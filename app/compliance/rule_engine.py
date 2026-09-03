@@ -12,9 +12,6 @@ Each rule in rules/rules.json carries a validation_type. This engine maps:
   STANDARD_QUANTITY   -> validate_standard_quantity
   DATE_VALIDATION     -> validate_date_present
   PRICE_VALIDATION    -> validate_price_present
-  DIMENSION_VALIDATION/PLACEMENT_REVIEW/TEXT_LEGIBILITY -> visual review
-  PHYSICAL_TEST_REQUIRED -> physical_test validator (NOT_APPLICABLE from image)
-  ADMINISTRATIVE      -> depends on the specific rule
 """
 
 import json
@@ -23,17 +20,12 @@ from pathlib import Path
 
 from app.compliance.validators import (
     Status,
-    validate_commodity_present,
-    validate_consumer_care_present,
     validate_contact_any_of,
     validate_date_present,
     validate_field_present,
-    validate_manufacturer_present,
-    validate_physical_test,
     validate_price_present,
     validate_quantity_unit,
     validate_standard_quantity,
-    validate_visual_review,
 )
 from app.services.extraction_service import ExtractionResult
 
@@ -87,17 +79,8 @@ def _dispatch_validator(rule: dict, extraction: ExtractionResult, category: str)
         return validate_date_present(extraction)
     if vtype == "PRICE_VALIDATION":
         return validate_price_present(extraction)
-    if vtype in ("DIMENSION_VALIDATION", "PLACEMENT_REVIEW", "TEXT_LEGIBILITY", "TEXT_CONTRAST"):
-        return validate_visual_review()
-    if vtype == "PHYSICAL_TEST_REQUIRED":
-        return validate_physical_test(rule["rule_number"])
-    if vtype == "ADMINISTRATIVE":
-        # e.g. Rule 22 complaints procedure — we can only verify contact present
-        if "consumer_care_contact" in fields:
-            return validate_consumer_care_present(extraction)
-        return validate_visual_review()
-    # unknown type — never FAIL on unsupported; flag for review
-    return validate_visual_review()
+    # Unknown type — flag for manual review rather than guessing
+    return validate_field_present(extraction, fields)
 
 
 def run_rules(

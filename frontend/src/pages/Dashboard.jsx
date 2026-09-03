@@ -73,7 +73,6 @@ export default function Dashboard() {
       <div className="stats-grid">
         {role === 'ADMIN' && <>
           <StatCard icon="⚖️" label="LMOs" value={stats.lmos} tone="tone-violet" />
-          <StatCard icon="🗂️" label="Zones" value={stats.zones} tone="tone-sky" />
           <StatCard icon="📋" label="LMO Analyses" value={lmoAnalyses.length} tone="tone-blue" />
         </>}
         {role === 'LMO' && <>
@@ -90,28 +89,22 @@ export default function Dashboard() {
         </>}
       </div>
 
-      {role === 'ADMIN' && data?.lmos_by_zone && (
+      {role === 'ADMIN' && data?.lmos && (
         <section className="panel">
-          <h3 className="panel-title">Legal Metrology Officers by Zone</h3>
-          {data.lmos_by_zone.length === 0 && (
-            <p className="muted">No LMOs assigned to zones yet. <Link to="/admin">Assign zones →</Link></p>
+          <h3 className="panel-title">Legal Metrology Officers</h3>
+          {data.lmos.length === 0 && (
+            <p className="muted">No LMOs registered yet.</p>
           )}
           <div className="zone-cards">
-            {data.lmos_by_zone.map((g) => (
-              <div className="zone-card" key={g.zone.id}>
-                <div className="zone-head">
-                  <strong>{g.zone.name}</strong>
-                  <span className="muted">{g.zone.jurisdiction || 'Jurisdiction not set'}</span>
-                </div>
-                {g.lmos.map((lmo) => (
-                  <div className="zone-lmo" key={lmo.id}>
-                    <span className="role-avatar small">⚖️</span>
-                    <div>
-                      <strong>{lmo.name}</strong>
-                      <span className="muted small">{lmo.email}</span>
-                    </div>
+            {data.lmos.map((lmo) => (
+              <div className="zone-card" key={lmo.id}>
+                <div className="zone-lmo">
+                  <span className="role-avatar small">⚖️</span>
+                  <div>
+                    <strong>{lmo.name}</strong>
+                    <span className="muted small">{lmo.email}</span>
                   </div>
-                ))}
+                </div>
               </div>
             ))}
           </div>
@@ -126,7 +119,7 @@ export default function Dashboard() {
           </div>
           <p className="muted">
             Review the compliance analyses performed by Legal Metrology
-            Officers across your zones ({lmoAnalyses.length} total).
+            Officers ({lmoAnalyses.length} total) and download their reports.
           </p>
           <div className="row">
             <Link to="/admin-analyses" className="secondary">Open LMO Analyses</Link>

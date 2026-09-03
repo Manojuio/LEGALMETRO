@@ -9,6 +9,7 @@ function statusClass(s) {
 export default function AdminAnalyses() {
   const [analyses, setAnalyses] = useState([])
   const [error, setError] = useState('')
+  const [downloading, setDownloading] = useState(null)
 
   useEffect(() => {
     api
@@ -17,18 +18,28 @@ export default function AdminAnalyses() {
       .catch((e) => setError(e.message))
   }, [])
 
-  // Group LMO analyses by zone (then by LMO).
-  const byZone = {}
-  const ordZones = []
-  for (const a of analyses) {
-    const zone = a.owner?.zone_name || 'Unassigned zone'
-    if (!byZone[zone]) {
-      byZone[zone] = { zone, lmos: {} }
-      ordZones.push(zone)
+  async function downloadReport(id) {
+    setDownloading(id)
+    setError('')
+    try {
+      await api.downloadReport(id)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDownloading(null)
     }
+  }
+
+  // Group LMO analyses by LMO.
+  const byLmo = {}
+  const ordLmos = []
+  for (const a of analyses) {
     const lmoName = a.owner?.name || 'Unknown LMO'
-    if (!byZone[zone].lmos[lmoName]) byZone[zone].lmos[lmoName] = []
-    byZone[zone].lmos[lmoName].push(a)
+    if (!byLmo[lmoName]) {
+      byLmo[lmoName] = []
+      ordLmos.push(lmoName)
+    }
+    byLmo[lmoName].push(a)
   }
 
   return (
@@ -36,7 +47,7 @@ export default function AdminAnalyses() {
       <div className="page-head">
         <div>
           <h1>LMO Analyses</h1>
-          <p className="muted">Compliance analyses performed by Legal Metrology Officers, grouped by zone.</p>
+          <p className="muted">Compliance analyses performed by Legal Metrology Officers under your administration.</p>
         </div>
       </div>
 
@@ -50,47 +61,42 @@ export default function AdminAnalyses() {
         </section>
       ) : (
         <div className="zone-ana-grid">
-          {ordZones.map((zone) => {
-            const grp = byZone[zone]
-            const lmoNames = Object.keys(grp.lmos)
-            return (
-              <section className="panel" key={zone}>
-                <h3 className="panel-title">📍 {zone}</h3>
-                {lmoNames.length === 0 && <p className="muted">No LMO analyses in this zone.</p>}
-                {lmoNames.map((lmo) => (
-                  <div key={lmo} className="lmo-ana-block">
-                    <div className="lmo-ana-head">
-                      <span className="role-avatar small">⚖️</span>
-                      <strong>{lmo}</strong>
-                      <span className="chip">{grp.lmos[lmo].length} analysis</span>
-                    </div>
-                    <table className="table">
-                      <thead>
-                        <tr><th>ID</th><th>Category</th><th>Status</th><th>Created</th><th></th></tr>
-                      </thead>
-                      <tbody>
-                        {grp.lmos[lmo].map((a) => (
-                          <tr key={a.id}>
-                            <td className="mono">{a.id.slice(0, 8)}</td>
-                            <td>{a.category || '—'}</td>
-                            <td>
-                              <span className={`badge ${statusClass(a.overall_status || a.status)}`}>
-                                {a.overall_status || a.status}
-                              </span>
-                            </td>
-                            <td className="muted small">
-                              {a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}
-                            </td>
-                            <td><Link to={`/analyses/${a.id}`} className="link">Open →</Link></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ))}
-              </section>
-            )
-          })}
+          {ordLmos.map((lmo) => (
+            <section className="panel" key={lmo}>
+              <h3 className="panel-title">⚖️ {lmo}</h3>
+              <table className="table">
+                <thead>
+                  <tr><th>ID</th><th>Category</th><th>Status</th><th>Created</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {byLmo[lmo].map((a) => (
+                    <tr key={a.id}>
+                      <td className="mono">{a.id.slice(0, 8)}</td>
+                      <td>{a.category || '—'}</td>
+                      <td>
+                        <span className={`badge ${statusClass(a.overall_status || a.status)}`}>
+                          {a.overall_status || a.status}
+                        </span>
+                      </td>
+                      <td className="muted small">
+                        {a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}
+                      </td>
+                      <td className="row-actions">
+                        <Link to={`/analyses/${a.id}`} className="link">Open →</Link>
+                        <button
+                          className="secondary small"
+                          onClick={() => downloadReport(a.id)}
+                          disabled={downloading === a.id || !a.overall_status}
+                        >
+                          {downloading === a.id ? 'Downloading…' : 'Download PDF'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          ))}
         </div>
       )}
     </div>

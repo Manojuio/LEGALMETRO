@@ -38,14 +38,38 @@ class ValidationOutcome:
 
 
 def _field_present(extraction: ExtractionResult, names: list[str]) -> ValidationOutcome:
-    """Generic FIELD_PRESENT validator."""
+    """Generic FIELD_PRESENT validator with partial-credit behaviour.
+
+    An image-only scan cannot rule out that a required declaration exists but
+    OCR simply failed to read it. So when *some* of a rule's required fields
+    are detected we return REVIEW (needs manual verification) rather than an
+    outright FAIL. We only FAIL when the majority of required declarations are
+    not detected.
+    """
+    if not names:
+        return ValidationOutcome(Status.PASS, "No required fields to verify", confidence=0.9)
+
     missing = [n for n in names if not extraction.has(n)]
+    found = [n for n in names if extraction.has(n)]
+
     if not missing:
         return ValidationOutcome(
             Status.PASS,
             f"Required declaration(s) present: {', '.join(names)}",
             confidence=0.95,
         )
+
+    # Majority present but some missing → likely an OCR miss, needs review.
+    present_ratio = len(found) / len(names)
+    if present_ratio >= 0.6:
+        return ValidationOutcome(
+            Status.REVIEW,
+            f"Most declarations present, but could not detect: {', '.join(missing)} "
+            f"— requires manual verification",
+            evidence=[{"type": "field", "found": found, "missing": missing}],
+            confidence=0.7,
+        )
+
     return ValidationOutcome(
         Status.FAIL,
         f"Required declaration(s) not detected: {', '.join(missing)}",

@@ -235,9 +235,9 @@ class ReportGenerator:
         d.add(Rect(0, 5, 460, 20, fillColor=colors.HexColor("#E0E0E0"), strokeColor=None))
 
         fill_width = (score / 100) * 460
-        if score >= 75:
+        if score >= 50:
             bar_color = SUCCESS_GREEN
-        elif score >= 60:
+        elif score >= 30:
             bar_color = WARNING_YELLOW
         else:
             bar_color = FAIL_RED
@@ -250,31 +250,34 @@ class ReportGenerator:
     def _create_priority_summary(self, summary: dict) -> Table:
         data = [
             [
-                Paragraph("<b>Category</b>", self.styles["ParamName"]),
-                Paragraph("<b>Detected</b>", self.styles["ParamName"]),
+                Paragraph("<b>Priority</b>", self.styles["ParamName"]),
+                Paragraph("<b>Passed</b>", self.styles["ParamName"]),
+                Paragraph("<b>Total</b>", self.styles["ParamName"]),
                 Paragraph("<b>Score</b>", self.styles["ParamName"]),
                 Paragraph("<b>Max</b>", self.styles["ParamName"]),
+                Paragraph("<b>%</b>", self.styles["ParamName"]),
             ],
         ]
 
         priority_map = {
-            "high_priority": ("Key Fields", colors.HexColor("#16a34a")),
-            "medium_priority": ("Supporting", colors.HexColor("#6366f1")),
-            "low_priority": ("Extra", colors.HexColor("#8b5cf6")),
+            "essential": ("Essential", colors.HexColor("#16a34a")),
+            "supporting": ("Supporting", colors.HexColor("#6366f1")),
         }
 
         for key, (label, color) in priority_map.items():
-            p_data = summary.get(key, {"passed": 0, "count": 0, "score": 0, "max": 0})
-            pct = round((p_data["score"] / p_data["max"] * 100)) if p_data["max"] else 0
+            p_data = summary.get(key, {"passed": 0, "count": 0, "score": 0, "max": 0, "percentage": 0})
+            pct = p_data.get("percentage", 0)
 
             data.append([
                 Paragraph(f'<font color="{color.hexval()}">{label}</font>', self.styles["ParamName"]),
-                Paragraph(f"{p_data['passed']}/{p_data['count']}", self.styles["ParamValue"]),
+                Paragraph(f"{p_data['passed']}", self.styles["ParamValue"]),
+                Paragraph(f"{p_data['count']}", self.styles["ParamValue"]),
                 Paragraph(f"{p_data['score']:.1f}", self.styles["ParamValue"]),
                 Paragraph(f"{p_data['max']:.1f}", self.styles["ParamValue"]),
+                Paragraph(f"{pct:.0f}%", self.styles["ParamValue"]),
             ])
 
-        table = Table(data, colWidths=[55 * mm, 35 * mm, 35 * mm, 35 * mm])
+        table = Table(data, colWidths=[35 * mm, 22 * mm, 22 * mm, 25 * mm, 25 * mm, 22 * mm])
         table.setStyle(TableStyle([
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 8),
@@ -329,9 +332,8 @@ class ReportGenerator:
         ]
 
         priority_colors = {
-            "HIGH": colors.HexColor("#16a34a"),
-            "MEDIUM": colors.HexColor("#6366f1"),
-            "LOW": colors.HexColor("#8b5cf6"),
+            "ESSENTIAL": colors.HexColor("#16a34a"),
+            "SUPPORTING": colors.HexColor("#6366f1"),
         }
 
         for i, param in enumerate(score.parameters, 1):
@@ -382,29 +384,41 @@ class ReportGenerator:
             "REVIEW": WARNING_YELLOW,
             "NOT_APPLICABLE": colors.grey,
         }
+        priority_colors = {
+            "HIGH": colors.HexColor("#16a34a"),
+            "MEDIUM": colors.HexColor("#6366f1"),
+        }
 
         data = [
             [
+                Paragraph("<b>#</b>", self.styles["ParamName"]),
                 Paragraph("<b>Rule</b>", self.styles["ParamName"]),
+                Paragraph("<b>Category</b>", self.styles["ParamName"]),
+                Paragraph("<b>Priority</b>", self.styles["ParamName"]),
                 Paragraph("<b>Status</b>", self.styles["ParamName"]),
-                Paragraph("<b>Title</b>", self.styles["ParamName"]),
-                Paragraph("<b>Reason</b>", self.styles["ParamName"]),
+                Paragraph("<b>Detail</b>", self.styles["ParamName"]),
             ]
         ]
 
         for rule in rules[:15]:
             status = rule.get("status", "UNKNOWN")
             status_color = status_colors.get(status, colors.black)
+            severity = rule.get("severity", "")
+            pri_color = priority_colors.get(severity, colors.black)
+            pri_label = "Essential" if severity == "HIGH" else "Supporting"
 
             data.append([
-                Paragraph(f"R{rule.get('rule_number', rule.get('rule', '?'))}", self.styles["ParamValue"]),
+                Paragraph(f"{rule.get('rule_number', rule.get('rule', '?'))}", self.styles["ParamValue"]),
+                Paragraph(rule.get("title", "")[:30], self.styles["ParamValue"]),
+                Paragraph(rule.get("category", ""), self.styles["ParamValue"]),
+                Paragraph(f'<font color="{pri_color.hexval()}">{pri_label}</font>',
+                         self.styles["ParamValue"]),
                 Paragraph(f'<font color="{status_color.hexval()}">{status}</font>',
                          self.styles["ParamValue"]),
-                Paragraph(rule.get("title", "")[:35], self.styles["ParamValue"]),
-                Paragraph(rule.get("reason", "")[:45], self.styles["ParamValue"]),
+                Paragraph(rule.get("reason", "")[:40], self.styles["ParamValue"]),
             ])
 
-        table = Table(data, colWidths=[15 * mm, 25 * mm, 55 * mm, 65 * mm])
+        table = Table(data, colWidths=[12 * mm, 42 * mm, 28 * mm, 22 * mm, 22 * mm, 44 * mm])
         table.setStyle(TableStyle([
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 8),

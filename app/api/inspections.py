@@ -45,14 +45,6 @@ class InspectionOut(BaseModel):
     created_at: object | None = None
 
 
-class ZoneOutBasic(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    name: str
-    jurisdiction: str | None = None
-
-
 @router.post(
     "/inspections",
     response_model=InspectionOut,
@@ -161,33 +153,24 @@ def dashboard_summary(
 ):
     """Return a role-specific summary for the frontend dashboard.
 
-    - ADMIN: user counts, LMO-by-zone, total analyses
+    - ADMIN: user counts, all LMOs, total analyses
     - LMO:   their total inspections + pending, plus all analyses
     - MANUFACTURER: their products + own analyses
     - RETAILER:     their own analyses
     - CONSUMER:     their own analyses
     """
-    from app.models import Product, Zone
+    from app.models import Product
 
     role = user.role.value
     total_analyses = db.query(Analysis).count()
 
     if role == "ADMIN":
         users = db.query(User).all()
-        lmos_by_zone = []
-        zones = db.query(Zone).all()
-        for z in zones:
-            lmos = [u for u in users if u.role == UserRole.LMO and u.zone_id == z.id]
-            if lmos:
-                lmos_by_zone.append(
-                    {
-                        "zone": {"id": z.id, "name": z.name, "jurisdiction": z.jurisdiction},
-                        "lmos": [
-                            {"id": u.id, "name": u.full_name, "email": u.email, "zone_id": u.zone_id}
-                            for u in lmos
-                        ],
-                    }
-                )
+        lmos = [
+            {"id": u.id, "name": u.full_name, "email": u.email}
+            for u in users
+            if u.role == UserRole.LMO
+        ]
         return {
             "role": role,
             "stats": {
@@ -198,10 +181,8 @@ def dashboard_summary(
                 "manufacturers": sum(1 for u in users if u.role == UserRole.MANUFACTURER),
                 "retailers": sum(1 for u in users if u.role == UserRole.RETAILER),
                 "consumers": sum(1 for u in users if u.role == UserRole.CONSUMER),
-                "zones": len(zones),
             },
-            "lmos_by_zone": lmos_by_zone,
-            "zones": [ZoneOutBasic(id=z.id, name=z.name, jurisdiction=z.jurisdiction) for z in zones],
+            "lmos": lmos,
         }
 
     if role == "LMO":
@@ -213,7 +194,6 @@ def dashboard_summary(
         )
         return {
             "role": role,
-            "zone": {"id": user.zone_id} if user.zone_id else None,
             "stats": {
                 "my_inspections": my_inspections,
                 "pending_inspections": pending_inspections,

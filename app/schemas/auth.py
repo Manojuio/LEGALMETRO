@@ -12,7 +12,6 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=6)
     full_name: str = Field(min_length=1)
     role: UserRole = UserRole.CONSUMER
-    zone_id: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -28,7 +27,6 @@ class UserOut(BaseModel):
     full_name: str
     role: UserRole
     is_active: bool
-    zone_id: str | None = None
     created_at: datetime
 
 
@@ -42,13 +40,3 @@ class UserUpdateRequest(BaseModel):
     full_name: str | None = None
     is_active: bool | None = None
     role: UserRole | None = None
-    zone_id: str | None = None
-
-
-class ZoneOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    name: str
-    jurisdiction: str | None = None
-    created_at: datetime

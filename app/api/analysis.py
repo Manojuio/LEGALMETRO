@@ -77,7 +77,6 @@ def list_analyses(
     out = []
     for a in analyses.all():
         owner = a.user
-        zone = owner.zone if owner and owner.zone else None
         out.append(
             {
                 "id": a.id,
@@ -91,8 +90,6 @@ def list_analyses(
                     "user_id": owner.id if owner else None,
                     "name": owner.full_name if owner else None,
                     "role": owner.role.value if owner else None,
-                    "zone_id": owner.zone_id if owner else None,
-                    "zone_name": zone.name if zone else None,
                 },
             }
         )
@@ -314,45 +311,50 @@ def generate_report(
 
     # Build the data dict from persisted state
     from app.models.rule import RuleResult, Rule
+    from dataclasses import dataclass
+
     rule_results = (
         db.query(RuleResult, Rule)
         .join(Rule, Rule.id == RuleResult.rule_id)
         .filter(RuleResult.analysis_id == analysis_id)
         .all()
     )
+
+    @dataclass
+    class _FakeCheck:
+        rule_number: str
+        title: str
+        category: str
+        severity: str
+        status: str
+        reason: str
+
     checks = [
-        {
-            "rule_number": rule.rule_number,
-            "title": rule.title,
-            "category": rule.category,
-            "status": rr.status,
-            "reason": rr.reason or "",
-        }
+        _FakeCheck(
+            rule_number=rule.rule_number,
+            title=rule.title,
+            category=rule.category,
+            severity=rule.severity,
+            status=rr.status,
+            reason=rr.reason or "",
+        )
         for rr, rule in rule_results
     ]
+    check_dicts = [
+        {
+            "rule": c.rule_number,
+            "title": c.title,
+            "category": c.category,
+            "severity": c.severity,
+            "status": c.status,
+            "reason": c.reason,
+        }
+        for c in checks
+    ]
 
-    # Get extracted fields to calculate scoring
-    from app.models.analysis import ExtractedField as ExtractedFieldModel
-    from app.services.extraction_service import ExtractionResult, ExtractedField
-    
-    extracted_fields = db.query(ExtractedFieldModel).filter(
-        ExtractedFieldModel.analysis_id == analysis_id
-    ).all()
-    
-    # Reconstruct extraction result for scoring
-    extraction = ExtractionResult(raw_text=analysis.raw_text or "")
-    for ef in extracted_fields:
-        extraction.fields[ef.field_name] = ExtractedField(
-            field_name=ef.field_name,
-            value=ef.field_value,
-            numeric=ef.field_value_numeric,
-            confidence=ef.confidence,
-            source_text=ef.source_text or "",
-        )
-    
-    # Calculate compliance score
+    # Calculate compliance score from persisted rule results
     from app.compliance.scoring import calculate_score
-    compliance_score = calculate_score(extraction)
+    compliance_score = calculate_score(checks)
 
     summary = analysis.summary_json or {}
     analysis_data = {
@@ -366,7 +368,7 @@ def generate_report(
         "overall_status": analysis.overall_status.value,
         "summary": summary,
         "compliance_score": compliance_score.get_summary(),
-        "rules": checks,
+        "rules": check_dicts,
     }
 
     generator = report_service.ReportGenerator()

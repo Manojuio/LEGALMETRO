@@ -1,4 +1,4 @@
-"""Role-based access control tests for auth, zones, products, and inspections.
+"""Role-based access control tests for auth, products, and inspections.
 
 These verify the rules in docs/ROLES.md using the seeded accounts:
 - admin@example.com / admin123
@@ -44,15 +44,8 @@ def test_register_consumer(client):
     assert r.json()["role"] == "CONSUMER"
 
 
-def test_register_lmo_allowed(client, client_factory):
+def test_register_lmo_allowed(client):
     import uuid
-    # Create a zone as admin, then register an LMO into it.
-    admin = client_factory("admin@example.com", "admin123")
-    zone_name = f"Zone-{uuid.uuid4().hex[:6]}"
-    zr = admin.post("/api/v1/zones", params={"name": zone_name, "jurisdiction": "Test"})
-    assert zr.status_code == 201, zr.text
-    zone_id = zr.json()["id"]
-
     email = f"newlmo{uuid.uuid4().hex[:8]}@example.com"
     r = client.post(
         "/api/v1/auth/register",
@@ -61,22 +54,21 @@ def test_register_lmo_allowed(client, client_factory):
             "password": "pass123",
             "full_name": "New LMO",
             "role": "LMO",
-            "zone_id": zone_id,
         },
     )
     assert r.status_code == 201
     assert r.json()["role"] == "LMO"
-    assert r.json()["zone_id"] == zone_id
 
 
-def test_register_lmo_requires_zone(client):
+def test_register_lmo_allowed_no_zone_required(client):
+    """LMO registration no longer requires selecting a zone."""
     import uuid
     email = f"nolmo{uuid.uuid4().hex[:8]}@example.com"
     r = client.post(
         "/api/v1/auth/register",
         json={"email": email, "password": "pass123", "full_name": "No Zone", "role": "LMO"},
     )
-    assert r.status_code == 422
+    assert r.status_code == 201
 
 
 def test_register_admin_forbidden(client):
@@ -87,26 +79,7 @@ def test_register_admin_forbidden(client):
     assert r.status_code == 403
 
 
-# --- Zone management (ADMIN only) --------------------------------------------
-
-
-def test_zones_admin_only(client_factory):
-    # Non-admin cannot list zones
-    consumer = client_factory("consumer@example.com", "consumer123")
-    assert consumer.get("/api/v1/zones").status_code == 403
-
-    # Admin can create + list zones
-    admin = client_factory("admin@example.com", "admin123")
-    import uuid
-    zone_name = f"Zone-{uuid.uuid4().hex[:6]}"
-    r = admin.post("/api/v1/zones", params={"name": zone_name, "jurisdiction": "Delhi NCR"})
-    assert r.status_code == 201
-    zone_id = r.json()["id"]
-    listed = admin.get("/api/v1/zones").json()
-    assert any(z["id"] == zone_id for z in listed)
-
-
-# --- Admin user management & LMO-by-zone -------------------------------------
+# --- Admin user management & all-LMO listing ---------------------------------
 
 
 def test_users_admin_only(client_factory):
@@ -120,31 +93,20 @@ def test_users_admin_only(client_factory):
     assert "ADMIN" in roles and "LMO" in roles
 
 
-def test_admin_lists_lmos_by_zone(client_factory):
+def test_admin_lists_all_lmos(client_factory):
     admin = client_factory("admin@example.com", "admin123")
-    # Assign the LMO to a zone
-    users = admin.get("/api/v1/users").json()
-    lmo = next(u for u in users if u["role"] == "LMO")
-    zones = admin.get("/api/v1/zones").json()
-    zone_id = zones[0]["id"] if zones else None
-    assert zone_id, "expected at least one zone from prior test"
-
-    upd = admin.patch(f"/api/v1/users/{lmo['id']}", json={"zone_id": zone_id})
-    assert upd.status_code == 200
-    assert upd.json()["zone_id"] == zone_id
-
     lmos = admin.get("/api/v1/admins/lmos").json()
-    assert any(u["id"] == lmo["id"] and u["zone_id"] == zone_id for u in lmos)
+    assert any(u["role"] == "LMO" for u in lmos)
 
 
-def test_admin_dashboard_shows_lmos_by_zone(client_factory):
+def test_admin_dashboard_shows_all_lmos(client_factory):
     admin = client_factory("admin@example.com", "admin123")
     r = admin.get("/api/v1/dashboard/summary")
     assert r.status_code == 200
     body = r.json()
     assert body["role"] == "ADMIN"
     assert "stats" in body
-    assert "lmos_by_zone" in body
+    assert "lmos" in body
     assert body["stats"]["total_users"] >= 5
 
 
@@ -263,32 +225,25 @@ def test_analysis_ownership_enforced(client_factory):
     assert run.status_code == 403
 
 
-# --- Admin transparency: sees LMO analyses by zone --------------------------
+# --- Admin transparency: sees LMO analyses ----------------------------------
 
 
 def test_admin_sees_only_lmo_analyses(client, client_factory):
     import uuid
 
-    # Zone for the LMO to register into.
-    admin = client_factory("admin@example.com", "admin123")
-    zone_name = f"AnaZone-{uuid.uuid4().hex[:6]}"
-    zr = admin.post("/api/v1/zones", params={"name": zone_name})
-    assert zr.status_code == 201, zr.text
-    zone_id = zr.json()["id"]
-
-    # Register + log in a fresh LMO in that zone.
+    # Register + log in a fresh LMO.
     lmo_email = f"anlmo{uuid.uuid4().hex[:8]}@example.com"
     rr = client.post(
         "/api/v1/auth/register",
         json={
             "email": lmo_email,
             "password": "lmo123",
-            "full_name": "Zone LMO",
+            "full_name": "LMO",
             "role": "LMO",
-            "zone_id": zone_id,
         },
     )
     assert rr.status_code == 201, rr.text
+    admin = client_factory("admin@example.com", "admin123")
     lmo = client_factory(lmo_email, "lmo123")
     lmo_analysis_id = lmo.post("/api/v1/analyses", data={"category": "FOOD"}).json()["analysis_id"]
 
@@ -302,7 +257,6 @@ def test_admin_sees_only_lmo_analyses(client, client_factory):
 
     assert lmo_analysis_id in by_id
     assert by_id[lmo_analysis_id]["owner"]["role"] == "LMO"
-    assert by_id[lmo_analysis_id]["owner"]["zone_name"] == zone_name
 
     # Admin must NOT see the manufacturer's analysis.
     assert mfr_analysis_id not in by_id

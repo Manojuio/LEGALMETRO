@@ -211,7 +211,7 @@ export function generatePDF(report, score) {
   doc.setFillColor(224, 224, 224)
   doc.roundedRect(MARGIN, y, barW, 6, 2, 2, 'F')
   const fill = (barW * score.total_score) / 100
-  const barC = score.total_score >= 75 ? COLORS.green : score.total_score >= 60 ? COLORS.yellow : COLORS.red
+  const barC = score.total_score >= 50 ? COLORS.green : score.total_score >= 30 ? COLORS.yellow : COLORS.red
   doc.setFillColor(...barC)
   if (fill > 1) doc.roundedRect(MARGIN, y, fill, 6, 2, 2, 'F')
   doc.setFont('helvetica', 'bold')
@@ -221,28 +221,26 @@ export function generatePDF(report, score) {
   y += 12
 
   // ===== PRIORITY TABLE =====
-  const priW = [50, 30, 30, 30]
+  const priW = [35, 22, 22, 28, 28, 25]
   const priRows = [
     [
-      { text: 'Key Fields', color: COLORS.green },
-      `${score.high_priority?.passed || 0}/${score.high_priority?.count || 0}`,
-      `${(score.high_priority?.score || 0).toFixed(1)}`,
-      `${(score.high_priority?.max || 0).toFixed(1)}`,
+      { text: 'Essential', color: COLORS.green },
+      `${score.essential?.passed || 0}`,
+      `${score.essential?.count || 0}`,
+      `${(score.essential?.score || 0).toFixed(1)}`,
+      `${(score.essential?.max || 0).toFixed(1)}`,
+      `${(score.essential?.percentage || 0).toFixed(0)}%`,
     ],
     [
       { text: 'Supporting', color: [99, 102, 241] },
-      `${score.medium_priority?.passed || 0}/${score.medium_priority?.count || 0}`,
-      `${(score.medium_priority?.score || 0).toFixed(1)}`,
-      `${(score.medium_priority?.max || 0).toFixed(1)}`,
-    ],
-    [
-      { text: 'Extra', color: [139, 92, 246] },
-      `${score.low_priority?.passed || 0}/${score.low_priority?.count || 0}`,
-      `${(score.low_priority?.score || 0).toFixed(1)}`,
-      `${(score.low_priority?.max || 0).toFixed(1)}`,
+      `${score.supporting?.passed || 0}`,
+      `${score.supporting?.count || 0}`,
+      `${(score.supporting?.score || 0).toFixed(1)}`,
+      `${(score.supporting?.max || 0).toFixed(1)}`,
+      `${(score.supporting?.percentage || 0).toFixed(0)}%`,
     ],
   ]
-  y = drawTable(doc, ['Category', 'Detected', 'Score', 'Max'], priRows, y, priW)
+  y = drawTable(doc, ['Priority', 'Passed', 'Total', 'Score', 'Max', '%'], priRows, y, priW)
   y += 6
 
   // ===== PRODUCT INFO =====
@@ -273,11 +271,10 @@ export function generatePDF(report, score) {
 
   // ===== PARAMETERS TABLE =====
   y = sectionTitle(doc, 'Compliance Parameters', y)
-  const paramW = [8, 42, 18, 16, 60, 26]
+  const paramW = [8, 48, 22, 18, 55, 29]
   const priColorMap = {
-    HIGH: COLORS.green,
-    MEDIUM: [99, 102, 241],
-    LOW: [139, 92, 246],
+    ESSENTIAL: COLORS.green,
+    SUPPORTING: [99, 102, 241],
   }
   const paramRows = (score.parameters || []).map((p, i) => [
     String(i + 1),
@@ -285,29 +282,35 @@ export function generatePDF(report, score) {
     { text: p.priority, color: priColorMap[p.priority] || [0, 0, 0] },
     { text: p.present ? 'PASS' : 'FAIL', color: p.present ? COLORS.green : COLORS.red },
     String(p.value || '').slice(0, 35),
-    `${p.points.toFixed(1)}/${(p.weight * 100).toFixed(1)}`,
+    `${p.points.toFixed(1)}/${(p.weight).toFixed(0)}`,
   ])
-  y = drawTable(doc, ['#', 'Parameter', 'Priority', 'Status', 'Value Detected', 'Score'], paramRows, y, paramW, { fontSize: 7, rowH: 6 })
+  y = drawTable(doc, ['#', 'Parameter', 'Priority', 'Status', 'Value', 'Score'], paramRows, y, paramW, { fontSize: 7, rowH: 6 })
   y += 6
 
   // ===== RULES TABLE =====
   const rules = report.rules || []
   if (rules.length > 0) {
     y = sectionTitle(doc, 'Rule Results', y)
-    const ruleW = [15, 20, 55, 80]
+    const ruleW = [12, 40, 25, 22, 22, 69]
     const statusClr = {
       PASS: COLORS.green,
       FAIL: COLORS.red,
       REVIEW: COLORS.yellow,
       NOT_APPLICABLE: [158, 158, 158],
     }
+    const priClr = {
+      HIGH: COLORS.green,
+      MEDIUM: [99, 102, 241],
+    }
     const ruleRows = rules.slice(0, 15).map(r => [
-      `R${r.rule || r.rule_number || '?'}`,
+      String(r.rule || r.rule_number || '?'),
+      String(r.title || '').slice(0, 30),
+      String(r.category || ''),
+      { text: r.severity === 'HIGH' ? 'Essential' : 'Supporting', color: priClr[r.severity] || [0, 0, 0] },
       { text: r.status || '?', color: statusClr[r.status] || [0, 0, 0] },
-      String(r.title || '').slice(0, 35),
-      String(r.reason || '').slice(0, 52),
+      String(r.reason || '').slice(0, 45),
     ])
-    y = drawTable(doc, ['Rule', 'Status', 'Title', 'Reason'], ruleRows, y, ruleW, { headerBg: COLORS.darkGrey, fontSize: 7, rowH: 6 })
+    y = drawTable(doc, ['#', 'Rule', 'Category', 'Priority', 'Status', 'Detail'], ruleRows, y, ruleW, { headerBg: COLORS.darkGrey, fontSize: 7, rowH: 6 })
   }
 
   // ===== DISCLAIMER =====

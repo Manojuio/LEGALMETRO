@@ -3,7 +3,7 @@ export const ROLES = {
     label: 'Administrator',
     short: 'Admin',
     icon: '🛡️',
-    tagline: 'Manage zones and assign Legal Metrology Officers (LMOs)',
+    tagline: 'Manage LMOs & review their compliance reports',
   },
   LMO: {
     label: 'Legal Metrology Officer',

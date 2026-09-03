@@ -105,13 +105,6 @@ def determine_applicability(
     applicable = []
     exemptions_applied = []
     for rule_num in candidate_rules:
-        # Imported-only rule (16) — only applies to imports
-        if rule_num == "16":
-            if not context.get("is_imported"):
-                continue
-        # Rule 19/20 (physical) — always applicable in the sense they must be
-        # flagged, but handled as NOT_APPLICABLE for image-only scanning.
-
         if evaluate_exemption(rule_num, context):
             exemptions_applied.append(rule_num)
             continue

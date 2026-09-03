@@ -46,6 +46,7 @@ def _resolved_to_extraction(resolved: dict, raw_text: str = "") -> ExtractionRes
             field_name=name,
             value=value,
             numeric=d.get("numeric"),
+            unit=d.get("unit"),
             confidence=d.get("confidence", 0.0),
             source_text=d.get("source_text") or "",
         )
@@ -129,39 +130,27 @@ def run_complete_analysis(analysis: Analysis, db) -> dict:
         classification.category,
     )
 
-    # 6. Calculate compliance score based on key parameters
-    compliance_score = calculate_score(extraction)
+    # 6. Calculate compliance score from actual rule results
+    compliance_score = calculate_score(checks, extraction)
 
-    # 7. Align rule results with score:
-    #    Score >= 75 → most rules PASS
-    #    Score 60-74 → some rules REVIEW
-    #    Score < 60  → rules FAIL
-    score = compliance_score.total_score
-    for c in checks:
-        if c.status == "NOT_APPLICABLE":
-            continue
-        if score >= 75:
-            if c.status == "FAIL":
-                c.status = "PASS"
-                c.reason = "Detected via automated analysis"
-        elif score >= 60:
-            if c.status == "FAIL":
-                c.status = "REVIEW"
-                c.reason = "Requires manual verification"
-        else:
-            pass
-
+    # 7. Aggregate rule results into a summary (real PASS / FAIL / REVIEW counts)
     aggregated = rule_engine.aggregate_overall(checks)
 
-    # 8. Set overall status based on score
-    if score >= 75:
-        aggregated["overall_status"] = "PASS"
-    elif score >= 60:
-        aggregated["overall_status"] = "REVIEW"
+    # 8. Overall status is derived from the real weighted score so the banner
+    #    and the score always agree. The score itself is a weighted sum of the
+    #    actual rule outcomes (PASS/REVIEW/FAIL), so this stays truthful.
+    score = compliance_score.total_score
+    if score >= compliance_score.pass_threshold:
+        overall_status = "PASS"
+    elif score >= 30:
+        overall_status = "REVIEW"
     else:
-        aggregated["overall_status"] = "FAIL"
+        overall_status = "FAIL"
+    aggregated["overall_status"] = overall_status
+
+    # 9. Persist
     analysis.status = "COMPLETED"
-    analysis.overall_status = aggregated["overall_status"]
+    analysis.overall_status = overall_status
     analysis.summary_json = aggregated["summary"]
     analysis.raw_text = raw_text
     _persist_rule_results(analysis, checks, db)

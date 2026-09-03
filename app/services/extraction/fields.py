@@ -26,7 +26,25 @@ _MRP_RES = [
     re.compile(r"\bMax\.?\s*Retail\s+Price\s*(?:Rs\.?|INR|₹)?\s*:?\s*(\d+(?:\.\d+)?)", re.IGNORECASE),
     re.compile(r"\bM{1,2}[RPI]{1,2}[PI]?\s*(?:Rs\.?|INR|₹)\s*:?\s*(\d+(?:\.\d+)?)", re.IGNORECASE),
     re.compile(r"\bMRP\s*[:\-]?\s*(?:Rs\.?|INR|₹)?\s*(\d+(?:\.\d+)?)\b", re.IGNORECASE),
+    # MRP followed by a stray symbol OCR misreads of ₹/Rs as < > { ( | etc.
+    re.compile(r"\bMRP\s*[:\-]?\s*[<>{(\[\]\|`'\"~@#&*]+\s*(\d+(?:\.\d+)?)\b", re.IGNORECASE),
+    # M.R.P. disfigurement regardless of symbol noise
+    re.compile(r"\bM\.?R\.?P\.?\s*:?\s*(?:Rs\.?|INR|₹)?\s*[<>{(\[\]\|`'\"~@#&*]*(\d+(?:\.\d+)?)\b", re.IGNORECASE),
 ]
+
+# Boxed-labels support: the printed heading ("MRP") often sits OUTSIDE a box
+# while the value ("₹120") is printed INSIDE it, so label and value land on
+# different lines / separated by whitespace. These regexes power a fallback
+# that binds the nearest standalone price-like number to the MRP label.
+_MRP_LABEL_RE = re.compile(
+    r"\b(?:max\.?\s*retail\s*price|m\.?r\.?p\.?)\b", re.IGNORECASE
+)
+# A standalone price-like value: 1-4 digit integer or decimal, and NOT followed
+# by / preceded by a quantity unit (so "120 g" is not mistaken for a price).
+_PRICE_VALUE_RE = re.compile(
+    r"(?:[\s:₹Rrs.]|^)(\d{1,4}(?:\.\d{1,2})?)(?!\s*(?:g|gm|gms|gram|kg|kg\.|ml|l|lit|litre|nos|pcs|count|pc|no|nos\b|mg)\b)",
+    re.IGNORECASE,
+)
 
 _UNIT_PATTERN = (
     r"(kg\.?|gms?\.?|g\b|grams?|mg\b|milligram|ml\b|cl\b|dl\b|lit(?:re|er)s?|"
@@ -56,8 +74,8 @@ _DATE_RE = re.compile(
 
 _DATE_LABEL_MAP = {
     "packing_date": re.compile(
-        r"\b(?:packed|pack|packing|m\.?f\.?g|mfg\.?|manufactur|prod\.?|production)\b[^0-9]*"
-        r"(\d{1,2}[/\-.]\d{2,4}|\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}|[A-Za-z]{3,9}\s*\d{4})",
+        r"\b(?:packed|packing|pack\s*dt|m\.?f\.?g|mfg\.?|m\.?f\.?d\.?|manufactur|prod\.?|production)\b[^0-9A-Za-z]*"
+        r"(\d{1,2}[/\-.]\d{2,4}|\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}|[A-Za-z]{3,9}\s*\d{4}|\d{1,2})\b",
         re.IGNORECASE,
     ),
     "best_before_date": re.compile(
@@ -90,15 +108,35 @@ _BATCH_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Tolerant manufacturer/marketer generic lines. OCR routinely garbles these
+# ("Manufactured" -> "Manulactured", "Marketed" -> "Matketed", "Mfd." -> "Mdf"),
+# so we anchor on distinctive leading letters + the trailing "by", capturing the
+# name that follows on the same or next line.
+_MFR_LABEL = (
+    r"(?:"
+    r"m[fd]\.?\s*by|"                    # Mfd. by / Mdf by / Mfcd by
+    r"manu[a-z]{2,12}\s+by|"             # manufactured/manulactured/manufactur by
+    r"m[aar][a-z]{2,8}\s+by|"            # marketed/matketed by
+    r"pack[a-z]{1,6}\s+by|"              # packed/packing by
+    r"market[a-z]{2,6}\s+by"             # marketing/marketd by
+    r")"
+)
+
 _MANUFACTURER_RE = re.compile(
-    r"\b(?:mfd\.?\s*by|manufactur(?:ed|er)\s*[:\-]?\s*by|pack(?:ed|er)?\s*[:\-]?\s*by|marketed\s*by)\s+"
+    r"\b" + _MFR_LABEL + r"\s+"
     r"([A-Za-z][A-Za-z0-9&\'\. ]+?)(?=$|\n|\b(?:plot|near|delhi|mumbai|bangalore|bengaluru|chennai|kolkata|"
     r"hyderabad|pune|ahmedabad|india)\b)",
     re.IGNORECASE | re.MULTILINE,
 )
 
+# "Manufactured by:" alone at end of line; company name follows on next line.
+_MANUFACTURER_NEXT_LINE_RE = re.compile(
+    r"\b" + _MFR_LABEL + r"\s*:?\s*\n\s*([A-Z][^\n]+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
 _ADDRESS_NEXT_LINE_RE = re.compile(
-    r"\b(?:mfd\.?\s*by|manufactur(?:ed|er)\s*[:\-]?\s*by|pack(?:ed|er)?\s*[:\-]?\s*by|marketed\s*by)\s+"
+    r"\b" + _MFR_LABEL + r"\s+"
     r"[A-Za-z0-9&\'\. ]+?\n([^\n]+)",
     re.IGNORECASE | re.MULTILINE,
 )
@@ -219,6 +257,18 @@ def _extract_mrp(col, text, image_id):
             val = float(m.group(1))
             _add(col, _ev("mrp", f"{val:g}", m.group(0), image_id, 0.95, numeric=val))
             return
+    # Boxed-labels fallback: heading ("MRP") and value ("120") are spatially
+    # separated (heading printed outside the box, value inside). When the
+    # adjacent regex found nothing but the MRP label IS present, bind the first
+    # standalone price-like number within a short window after the label.
+    lm = _MRP_LABEL_RE.search(text)
+    if lm:
+        window = text[lm.end():lm.end() + 80]
+        pm = _PRICE_VALUE_RE.search(window)
+        if pm:
+            val = float(pm.group(1))
+            _add(col, _ev("mrp", f"{val:g}", lm.group(0) + " -> " + pm.group(0),
+                          image_id, 0.55, numeric=val))
     # no context should not invent MRP; leave MISSING
 
 
@@ -236,6 +286,13 @@ def _extract_manufacturer(col, lines, image_id):
     m = _MANUFACTURER_RE.search(text)
     if m:
         _add(col, _ev("manufacturer_name", m.group(1).strip(), m.group(0), image_id, 0.85))
+    else:
+        nm = _MANUFACTURER_NEXT_LINE_RE.search(text)
+        if nm:
+            name = nm.group(1).strip()
+            name = re.split(r"\s*(?:plot|industrial\s+area|near|road|street)\b", name, flags=re.IGNORECASE)[0].strip()
+            name = name.rstrip(":;,._ ")
+            _add(col, _ev("manufacturer_name", name, nm.group(0), image_id, 0.8))
     # address: line right after a manufacturer line, or a standalone address line
     am = _ADDRESS_NEXT_LINE_RE.search(text)
     if am:

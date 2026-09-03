@@ -19,6 +19,8 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from app.services import image_service, ocr_service, extraction_service
+from app.services import classification_service
+from app.compliance import applicability, rule_engine
 from app.compliance.scoring import calculate_score, get_grade_description
 from app.services.report_service import ReportGenerator
 from app.core.config import get_settings
@@ -71,35 +73,69 @@ def generate_report(image_name: str, ocr_data: dict, output_dir: Path) -> Path:
     """Generate PDF report for the processed image."""
     print(f"\n  Generating PDF report...")
     
-    # Calculate compliance score
+    # Calculate compliance score from actual rule engine results
     extraction = ocr_data["extraction"]
-    compliance_score = calculate_score(extraction)
-    
+    raw_text = ocr_data["raw_text"]
+
+    # Classification
+    commodity = extraction.get("commodity_name")
+    classification = classification_service.classify(
+        commodity.value if commodity else None,
+        raw_text,
+    )
+
+    # Applicability
+    context = {
+        "is_imported": False,
+        "sale_type": "RETAIL",
+        "package_type": "RETAIL",
+        "category": classification.category,
+    }
+    applicability_result = applicability.determine_applicability(
+        classification.applicable_rules,
+        context,
+    )
+
+    # Run rule engine
+    checks = rule_engine.run_rules(
+        extraction,
+        applicability_result.applicable_rules,
+        classification.category,
+    )
+
+    # Real score from rule results
+    compliance_score = calculate_score(checks)
+
     print(f"\n  Compliance Score: {compliance_score.total_score:.1f}/100")
     print(f"  Grade: {compliance_score.grade} - {get_grade_description(compliance_score.grade)}")
-    print(f"\n  Parameter Breakdown:")
-    for param in compliance_score.parameters:
-        status = "PASS" if param.present else "FAIL"
-        print(f"    [{status}] {param.name} ({param.priority}): {param.points:.1f}/{param.weight * 100:.1f}")
+    print(f"\n  Rule Results:")
+    for c in checks:
+        print(f"    [{c.status}] Rule {c.rule_number} ({c.severity}): {c.title}")
     
     # Build analysis data
+    check_dicts = [
+        {
+            "rule": c.rule_number,
+            "title": c.title,
+            "category": c.category,
+            "severity": c.severity,
+            "status": c.status,
+            "reason": c.reason,
+        }
+        for c in checks
+    ]
     analysis_data = {
         "analysis_id": f"test_{image_name.replace(' ', '_').replace('.', '_')}",
         "product": {
             "name": extraction.get("commodity_name").value if extraction.has("commodity_name") else "Unknown Product",
-            "category": "Packaged Commodity",
-            "subcategory": "Test Analysis",
-            "classification_confidence": 0.9,
+            "category": classification.category,
+            "subcategory": classification.subcategory,
+            "classification_confidence": classification.confidence,
         },
         "overall_status": "COMPLETED",
-        "summary": {
-            "PASS": sum(1 for p in compliance_score.parameters if p.present),
-            "FAIL": sum(1 for p in compliance_score.parameters if not p.present),
-            "REVIEW": 0,
-            "NOT_APPLICABLE": 0,
-        },
+        "summary": {},
         "compliance_score": compliance_score.get_summary(),
-        "rules": [],  # Add rules if needed
+        "rules": check_dicts,
     }
     
     # Generate PDF

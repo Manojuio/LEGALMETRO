@@ -1,19 +1,23 @@
-"""Compliance scoring system for Packaged Commodities (Prototype).
+"""Compliance scoring — derived from real rule engine results.
 
-Scoring rules:
-  - Blank / unreadable image → auto FAIL (low score)
-  - Has text but 0 key fields → ~30 (FAIL)
-  - 1 key field detected → ~75 (Satisfactory)
-  - 2 key fields detected → ~85 (Good)
-  - 3 key fields detected → 90-92 (Excellent)
-  - 4 key fields detected → 93-97 (Excellent)
+Score = weighted sum of rule outcomes:
+  PASS            → full weight toward 100
+  REVIEW          → 50 % of weight
+  FAIL            → 0
+  NOT_APPLICABLE  → excluded from denominator
 
-Score is always ≤ 100.
+Priority weights (2 levels):
+  ESSENTIAL  = 10 pts  (core declarations every product must have)
+  SUPPORTING =  5 pts  (additional requirements)
 """
 
-import random
 from dataclasses import dataclass, field
-from app.services.extraction_service import ExtractionResult
+
+
+SEVERITY_WEIGHTS = {"HIGH": 10, "MEDIUM": 5}
+
+# Display mapping: rule severity → human-readable priority label
+PRIORITY_LABELS = {"HIGH": "ESSENTIAL", "MEDIUM": "SUPPORTING"}
 
 
 @dataclass
@@ -28,7 +32,7 @@ class ParameterScore:
 
     def __repr__(self):
         status = "PASS" if self.present else "FAIL"
-        return f"[{status}] {self.name}: {self.points:.1f}/{self.weight * 100:.1f} ({self.value})"
+        return f"[{status}] {self.name}: {self.points:.1f}/{self.weight:.1f} ({self.value})"
 
 
 @dataclass
@@ -36,146 +40,110 @@ class ComplianceScore:
     total_score: float
     grade: str
     parameters: list[ParameterScore] = field(default_factory=list)
-    pass_threshold: float = 75.0
+    pass_threshold: float = 50.0
 
     @property
     def is_compliant(self) -> bool:
         return self.total_score >= self.pass_threshold
 
     def get_summary(self) -> dict:
-        high = [p for p in self.parameters if p.priority == "HIGH"]
-        medium = [p for p in self.parameters if p.priority == "MEDIUM"]
-        low = [p for p in self.parameters if p.priority == "LOW"]
+        essential = [p for p in self.parameters if p.priority == "ESSENTIAL"]
+        supporting = [p for p in self.parameters if p.priority == "SUPPORTING"]
 
-        high_max = sum(p.weight * 100 for p in high)
-        med_max = sum(p.weight * 100 for p in medium)
-        low_max = sum(p.weight * 100 for p in low)
-        total_max = high_max + med_max + low_max
-
-        ratio = self.total_score / total_max if total_max else 0
+        ess_max = sum(p.weight for p in essential)
+        ess_pts = sum(p.points for p in essential)
+        sup_max = sum(p.weight for p in supporting)
+        sup_pts = sum(p.points for p in supporting)
 
         return {
             "total_score": round(self.total_score, 1),
             "grade": self.grade,
             "is_compliant": self.is_compliant,
-            "high_priority": {
-                "count": len(high),
-                "passed": sum(1 for p in high if p.present),
-                "score": round(high_max * ratio, 1),
-                "max": high_max,
+            "pass_threshold": self.pass_threshold,
+            "essential": {
+                "count": len(essential),
+                "passed": sum(1 for p in essential if p.present),
+                "score": round(ess_pts, 1),
+                "max": ess_max,
+                "percentage": round((ess_pts / ess_max * 100) if ess_max else 0, 1),
             },
-            "medium_priority": {
-                "count": len(medium),
-                "passed": sum(1 for p in medium if p.present),
-                "score": round(med_max * ratio, 1),
-                "max": med_max,
-            },
-            "low_priority": {
-                "count": len(low),
-                "passed": sum(1 for p in low if p.present),
-                "score": round(low_max * ratio, 1),
-                "max": low_max,
+            "supporting": {
+                "count": len(supporting),
+                "passed": sum(1 for p in supporting if p.present),
+                "score": round(sup_pts, 1),
+                "max": sup_max,
+                "percentage": round((sup_pts / sup_max * 100) if sup_max else 0, 1),
             },
         }
 
 
-# ── Bold parameters (drive the actual score) ─────────────────────────────
-BOLD_PARAMETERS = [
-    {"name": "MRP / Retail Price", "key": "mrp", "priority": "HIGH"},
-    {"name": "Net Quantity", "key": "net_quantity", "priority": "HIGH"},
-    {"name": "Manufacturer Name", "key": "manufacturer_name", "priority": "HIGH"},
-    {"name": "Consumer Care Contact", "key": "consumer_care_contact", "priority": "HIGH"},
-]
+def calculate_score(rule_checks: list, extraction=None) -> ComplianceScore:
+    """Calculate score from real rule engine results.
 
-# ── Dummy parameters (always PASS, with real weights for bar movement) ────
-DUMMY_PARAMETERS = [
-    {"name": "Manufacturing Date", "key": "packing_date", "priority": "MEDIUM", "weight": 0.10},
-    {"name": "Best Before / Expiry", "key": "best_before_date", "priority": "MEDIUM", "weight": 0.10},
-    {"name": "Commodity Name", "key": "commodity_name", "priority": "MEDIUM", "weight": 0.10},
-    {"name": "Country of Origin", "key": "country_of_origin", "priority": "LOW", "weight": 0.034},
-    {"name": "Batch Number", "key": "batch_number", "priority": "LOW", "weight": 0.033},
-    {"name": "Unit Sale Price", "key": "unit_sale_price", "priority": "LOW", "weight": 0.033},
-]
+    Parameters
+    ----------
+    rule_checks : list[RuleCheck]
+        Output of rule_engine.run_rules().
+    extraction : ExtractionResult, optional
+        Used only to check if OCR produced any text at all.
+    """
+    parameters: list[ParameterScore] = []
+    total_weight = 0.0
+    earned = 0.0
 
+    for rc in rule_checks:
+        weight = SEVERITY_WEIGHTS.get(rc.severity, 5)
+        priority = PRIORITY_LABELS.get(rc.severity, "SUPPORTING")
 
-def _has_text(extraction: ExtractionResult) -> bool:
-    raw = getattr(extraction, "raw_text", "") or ""
-    return len(raw.strip()) >= 10
+        if rc.status == "NOT_APPLICABLE":
+            parameters.append(ParameterScore(
+                name=f"Rule {rc.rule_number}: {rc.title}",
+                priority=priority,
+                weight=weight,
+                present=False,
+                value="N/A",
+                score=0.0,
+                points=0.0,
+            ))
+            continue
 
+        total_weight += weight
 
-def _text_length(extraction: ExtractionResult) -> int:
-    raw = getattr(extraction, "raw_text", "") or ""
-    return len(raw.strip())
-
-
-def calculate_score(extraction: ExtractionResult) -> ComplianceScore:
-    parameters = []
-
-    # ── Bold image check ──
-    has_content = _has_text(extraction)
-    text_len = _text_length(extraction)
-
-    # ── Check bold parameters ──
-    detected = []
-    for param_def in BOLD_PARAMETERS:
-        field_name = param_def["key"]
-        present = extraction.has(field_name)
-
-        if present:
-            field_val = extraction.get(field_name)
-            value = field_val.value if field_val else "Present"
+        if rc.status == "PASS":
+            pts = weight
+        elif rc.status == "REVIEW":
+            pts = weight * 0.5
         else:
-            value = "Not Detected"
+            # FAIL
+            pts = 0.0
 
-        detected.append(present)
+        earned += pts
         parameters.append(ParameterScore(
-            name=param_def["name"],
-            priority=param_def["priority"],
-            weight=0.25,
-            present=present,
-            value=value,
-            score=1.0 if present else 0.0,
-            points=25.0 if present else 0.0,
+            name=f"Rule {rc.rule_number}: {rc.title}",
+            priority=priority,
+            weight=weight,
+            present=(rc.status == "PASS"),
+            value=rc.status,
+            score=1.0 if rc.status == "PASS" else 0.5 if rc.status == "REVIEW" else 0.0,
+            points=pts,
         ))
 
-    # ── Score based on bold rules ──
-    pass_count = sum(detected)
-
-    if not has_content:
-        total_score = random.randint(2, 8)
-    elif text_len < 30:
-        total_score = random.randint(10, 20)
-    elif pass_count == 0:
-        total_score = random.randint(20, 30)
-    elif pass_count == 1:
-        total_score = random.randint(73, 77)
-    elif pass_count == 2:
-        total_score = random.randint(83, 87)
-    elif pass_count == 3:
-        total_score = random.randint(90, 92)
+    # Edge case: no applicable rules at all
+    if total_weight == 0:
+        total_score = 0.0
     else:
-        total_score = random.randint(93, 97)
+        total_score = (earned / total_weight) * 100.0
 
-    # ── Dummy params: always PASS with real points ──
-    for param_def in DUMMY_PARAMETERS:
-        w = param_def["weight"]
-        parameters.append(ParameterScore(
-            name=param_def["name"],
-            priority=param_def["priority"],
-            weight=w,
-            present=True,
-            value="Verified",
-            score=1.0,
-            points=w * 100.0,
-        ))
+    # Clamp 0-100
+    total_score = max(0.0, min(100.0, total_score))
 
     grade = _calculate_grade(total_score)
 
     return ComplianceScore(
-        total_score=total_score,
+        total_score=round(total_score, 1),
         grade=grade,
         parameters=parameters,
-        pass_threshold=75.0,
+        pass_threshold=50.0,
     )
 
 
@@ -186,7 +154,7 @@ def _calculate_grade(score: float) -> str:
         return "A"
     elif score >= 60:
         return "B"
-    elif score >= 45:
+    elif score >= 50:
         return "C"
     elif score >= 30:
         return "D"
@@ -197,10 +165,10 @@ def _calculate_grade(score: float) -> str:
 def get_grade_description(grade: str) -> str:
     descriptions = {
         "A+": "Excellent - Fully Compliant",
-        "A": "Satisfactory - Compliant",
-        "B": "Needs Improvement",
-        "C": "Poor - Significant Issues",
-        "D": "Critical - Non-Compliant",
+        "A": "Very Good - Compliant",
+        "B": "Good - Compliant",
+        "C": "Satisfactory - Meets Minimum (Compliant)",
+        "D": "Poor - Review Required (Non-Compliant)",
         "F": "Fail - Non-Compliant",
     }
     return descriptions.get(grade, "Unknown")

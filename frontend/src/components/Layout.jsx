@@ -6,7 +6,7 @@ import { roleConfig } from '../config/roles'
 const ROLE_MENUS = {
   ADMIN: [
     { to: '/', label: 'Overview', icon: '📊', end: true },
-    { to: '/admin', label: 'Zones & LMOs', icon: '🗂️' },
+    { to: '/admin', label: 'LMOs', icon: '⚖️' },
     { to: '/admin-analyses', label: 'LMO Analyses', icon: '📋' },
   ],
   LMO: [

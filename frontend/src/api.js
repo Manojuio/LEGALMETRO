@@ -47,14 +47,6 @@ export const api = {
     request('/auth/register', { method: 'POST', body: payload }),
   me: () => request('/auth/me'),
   dashboard: () => request('/dashboard/summary'),
-  zones: () => request('/zones'),
-  zonesAvailable: () => request('/zones/public'),
-  createZone: ({ name, jurisdiction }) => {
-    const qs = new URLSearchParams()
-    qs.set('name', name)
-    if (jurisdiction) qs.set('jurisdiction', jurisdiction)
-    return request(`/zones?${qs.toString()}`, { method: 'POST' })
-  },
   listUsers: () => request('/users'),
   lmos: () => request('/admins/lmos'),
   updateUser: (id, payload) => request(`/users/${id}`, { method: 'PATCH', body: payload }),

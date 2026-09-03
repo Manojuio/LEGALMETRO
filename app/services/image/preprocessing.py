@@ -169,6 +169,29 @@ def resize_within_max(image: np.ndarray, max_dim: int, steps: list[str]) -> np.n
     return out
 
 
+def upscale_if_small(image: np.ndarray, min_height: int = 700, steps: list[str] | None = None) -> np.ndarray:
+    """Upscale images where the shortest dimension is too small for OCR.
+
+    Many package photos are taken at an angle or from a distance, resulting
+    in small text that EasyOCR can't segment.  Upscaling to at least
+    ``min_height`` px on the shortest edge gives the OCR engine more pixels
+    to work with.  Only upscale (never shrink);  cap at 2x to avoid
+    blowing up blurry images into very large arrays.
+    """
+    if steps is None:
+        steps = []
+    h, w = image.shape[:2]
+    shortest = min(h, w)
+    if shortest >= min_height:
+        return image
+    # scale so shortest edge reaches min_height, capped at 2x
+    scale = min(2.0, min_height / shortest)
+    new_w, new_h = int(w * scale), int(h * scale)
+    out = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+    steps.append(f"upscale:{scale:.2f}")
+    return out
+
+
 def to_grayscale(image: np.ndarray, steps: list[str]) -> np.ndarray:
     steps.append("grayscale")
     if image.ndim == 2:
@@ -303,6 +326,7 @@ def preprocess(image: np.ndarray, options: dict | None = None) -> PreprocessedIm
     original = np.ascontiguousarray(image)  # snapshot — never mutated below
 
     working = resize_within_max(original, int(opts["max_dim"]), steps)
+    working = upscale_if_small(working, steps=steps)
     working = to_grayscale(working, steps)
     if opts["denoise"]:
         working = denoise(working, steps)

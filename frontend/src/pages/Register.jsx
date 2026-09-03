@@ -16,30 +16,15 @@ export default function Register() {
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '', full_name: '' })
   const [roleField, setRoleField] = useState('CONSUMER')
-  const [zoneId, setZoneId] = useState('')
-  const [zones, setZones] = useState([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-
-  const isLmo = roleField === 'LMO'
-
-  useEffect(() => {
-    if (isLmo) {
-      api
-        .zonesAvailable()
-        .then((z) => setZones(z || []))
-        .catch((e) => setError(e.message))
-    } else {
-      setZoneId('')
-    }
-  }, [isLmo])
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setBusy(true)
     try {
-      await register({ ...form, role: roleField, zone_id: isLmo ? zoneId : undefined })
+      await register({ ...form, role: roleField })
       navigate('/login', { state: { registered: true } })
     } catch (err) {
       setError(err.message)
@@ -84,17 +69,6 @@ export default function Register() {
             })}
             <p className="role-hint">{roleConfig(roleField).tagline}</p>
           </div>
-
-          {isLmo && (
-            <label>Your zone (jurisdiction)
-              <select value={zoneId} onChange={(e) => setZoneId(e.target.value)} required>
-                <option value="">Select your zone…</option>
-                {zones.map((z) => (
-                  <option key={z.id} value={z.id}>{z.name}{z.jurisdiction ? ` — ${z.jurisdiction}` : ''}</option>
-                ))}
-              </select>
-            </label>
-          )}
 
           <label>Full name
             <input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Your full name" required />
