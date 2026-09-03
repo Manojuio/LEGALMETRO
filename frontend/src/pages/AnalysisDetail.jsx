@@ -144,7 +144,7 @@ export default function AnalysisDetail() {
           <div className="empty">
             <p className="muted">
               {isAdmin
-                ? 'This analysis was performed by an LMO. The generated report is shown below.'
+                ? 'This analysis was performed by a Legal Metrology Officer. Download the PDF report to review the compliance results.'
                 : 'Run the full pipeline to extract product data and check compliance.'}
             </p>
           </div>
