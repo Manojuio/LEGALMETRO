@@ -76,7 +76,7 @@ def login(
 ) -> TokenResponse:
     """Validate credentials and return a JWT access token."""
     user = db.query(User).filter(User.email == payload.email.lower()).first()
-    if user is None or not verify_password(user.hashed_password, payload.hashed_password):
+    if user is None or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is deactivated")
