@@ -48,6 +48,31 @@ def _get_owned_analysis(analysis_id: str, user: User, db: Session) -> Analysis:
     return analysis
 
 
+def _analysis_image_paths(db: Session, analysis_id: str) -> list[str]:
+    """Return absolute on-disk paths for an analysis's product images.
+
+    Images are stored relative to the working directory; they are resolved to
+    absolute paths here so the report generator can embed them in the PDF.
+    Missing files are skipped gracefully.
+    """
+    from pathlib import Path
+
+    images = (
+        db.query(ProductImage)
+        .filter(ProductImage.analysis_id == analysis_id)
+        .order_by(ProductImage.image_position)
+        .all()
+    )
+    paths = []
+    for img in images:
+        p = Path(img.file_path)
+        if not p.is_absolute():
+            p = Path.cwd() / p
+        if p.exists():
+            paths.append(str(p))
+    return paths
+
+
 @router.get(
     "/analyses",
     summary="List analyses visible to the current user",
@@ -194,6 +219,59 @@ def upload_image(
             "width": product_image.width,
             "height": product_image.height,
         },
+    )
+
+
+@router.get(
+    "/analyses/{analysis_id}/image",
+    summary="Serve a product image for an analysis",
+    tags=["analysis"],
+)
+def get_analysis_image(
+    analysis_id: str,
+    position: str = "FRONT",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return the stored product image for the requested position.
+
+    Falls back to the first available image (preferring FRONT) if the
+    requested position isn't present. Returns the image bytes as-is.
+    """
+    analysis = _get_owned_analysis(analysis_id, current_user, db)
+
+    try:
+        pos_enum = ImagePosition[position.upper()]
+    except KeyError:
+        valid = [p.name for p in ImagePosition]
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid position '{position}'. Valid: {valid}",
+        )
+
+    images = db.query(ProductImage).filter(
+        ProductImage.analysis_id == analysis_id
+    ).all()
+    if not images:
+        raise HTTPException(status_code=404, detail="No images uploaded")
+
+    # Prefer the requested position; else the first image in a sensible order.
+    position_order = {pos.name: i for i, pos in enumerate(ImagePosition)}
+    images_sorted = sorted(images, key=lambda i: position_order.get(i.image_position.name, 99))
+    selected = next((i for i in images_sorted if i.image_position == pos_enum), images_sorted[0])
+
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+    path = Path(selected.file_path)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Image file missing on disk")
+
+    return FileResponse(
+        path=str(path),
+        media_type=selected.mime_type or "image/jpeg",
+        filename=selected.filename,
     )
 
 
@@ -369,6 +447,7 @@ def generate_report(
         "summary": summary,
         "compliance_score": compliance_score.get_summary(),
         "rules": check_dicts,
+        "images": _analysis_image_paths(db, analysis_id),
     }
 
     generator = report_service.ReportGenerator()

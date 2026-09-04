@@ -25,6 +25,8 @@ from reportlab.platypus import (
     Table,
     TableStyle,
     HRFlowable,
+    Image,
+    KeepTogether,
 )
 from reportlab.graphics.shapes import Drawing, Rect, String
 
@@ -312,9 +314,68 @@ class ReportGenerator:
             ("TOPPADDING", (0, 0), (-1, -1), 4),
             ("LINEBELOW", (0, 0), (-1, -1), 0.5, colors.lightgrey),
         ]))
-        elements.append(info_table)
+
+        # Embed the product image(s) if any are available.
+        image_paths = analysis_data.get("images") or []
+        if image_paths:
+            image_table = self._build_image_flowables(image_paths)
+            elements.append(KeepTogether([image_table, Spacer(1, 10), info_table]))
+        else:
+            elements.append(info_table)
 
         return elements
+
+    def _build_image_flowables(self, image_paths: list[str]) -> Table:
+        """Build a side-by-side row of the product photos.
+
+        Each image keeps its aspect ratio, fit to a fixed target width. Images
+        that can't be opened are skipped; if none load, an empty table is
+        returned so the report still builds successfully.
+        """
+        from PIL import Image as PILImage
+
+        avail_w = 180 * mm  # usable width on A4 within margins
+        target_w = 55 * mm
+        max_h = 70 * mm
+
+        cells = []
+        for path in image_paths:
+            try:
+                with PILImage.open(path) as im:
+                    w, h = im.size
+                if w <= 0 or h <= 0:
+                    continue
+                scale = min(target_w / w, max_h / h, 1.0)
+                draw_width = w * scale
+                draw_height = h * scale
+                cells.append(Image(path, width=draw_width, height=draw_height))
+            except Exception:
+                continue
+
+        if not cells:
+            return Table([[""]], colWidths=[avail_w])
+
+        gap = 4 * mm
+        # Scale every image down so the total row fits the available width.
+        per = min(target_w, (avail_w - (len(cells) - 1) * gap) / len(cells))
+        cols = []
+        for c in cells:
+            ratio = c.drawHeight / c.drawWidth if c.drawWidth else 1.0
+            c.drawWidth = per
+            c.drawHeight = per * ratio
+            cols.append(c)
+
+        table = Table([cols], colWidths=[per] * len(cols))
+        table.setStyle(TableStyle([
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), int(gap / 2)),
+            ("RIGHTPADDING", (0, 0), (-1, -1), int(gap / 2)),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#CCCCCC")),
+        ]))
+        return table
 
     def _build_parameters_table(self, score: ComplianceScore) -> list:
         elements = []

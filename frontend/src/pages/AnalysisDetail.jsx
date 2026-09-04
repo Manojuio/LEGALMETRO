@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useLocation, Link } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
 import RunLoader from '../components/RunLoader'
@@ -81,8 +81,11 @@ function ProgressBar({ label, passed, count, percentage, color }) {
 
 export default function AnalysisDetail() {
   const { id } = useParams()
+  const location = useLocation()
   const { user } = useAuth()
-  const [report, setReport] = useState(null)
+  // Pre-load the report if it was passed along (e.g. from a batch summary),
+  // so the user is not asked to re-run an already-completed analysis.
+  const [report, setReport] = useState(location.state?.report || null)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
   const [inspectionForms, setInspectionForms] = useState(false)
@@ -90,6 +93,21 @@ export default function AnalysisDetail() {
   const isAdmin = user.role === 'ADMIN'
   const canRun = !isAdmin
   const isLmo = user.role === 'LMO'
+
+  // Fallback: if no report was passed but a batch result exists in storage,
+  // restore it so a refresh/direct open still shows results without re-running.
+  useEffect(() => {
+    if (report) return
+    try {
+      const raw = sessionStorage.getItem('lm_batch_results')
+      if (raw) {
+        const cached = JSON.parse(raw)
+        const match = cached.find((r) => r.analysis_id === id)
+        if (match?.report) setReport(match.report)
+      }
+    } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
 
   async function downloadReport() {
     setError('')

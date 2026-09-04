@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Analyze from './pages/Analyze'
+import BatchResults from './pages/BatchResults'
 import Analyses from './pages/Analyses'
 import AnalysisDetail from './pages/AnalysisDetail'
 import AdminAnalyses from './pages/AdminAnalyses'
@@ -51,6 +52,14 @@ function App() {
               element={
                 <Protected>
                   <RoleGuard roles={['LMO', 'MANUFACTURER', 'RETAILER', 'CONSUMER']}><Analyze /></RoleGuard>
+                </Protected>
+              }
+            />
+            <Route
+              path="/batch-results"
+              element={
+                <Protected>
+                  <RoleGuard roles={['LMO', 'MANUFACTURER', 'RETAILER', 'CONSUMER']}><BatchResults /></RoleGuard>
                 </Protected>
               }
             />
