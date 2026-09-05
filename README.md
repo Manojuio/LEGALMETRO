@@ -1,4 +1,3 @@
-
 <div align="center">
 
 # 🏛️ Legal Metrology Compliance Scanner
