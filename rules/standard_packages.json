@@ -1,0 +1,121 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "source": "Legal Metrology (Packaged Commodities) Rules, 2011 - First Schedule",
+    "last_updated": "2026-08-31"
+  },
+  "standard_packages": {
+    "WEIGHT": {
+      "description": "Standard quantities by weight",
+      "unit": "g",
+      "standards": [
+        {"value": 10, "label": "10 g"},
+        {"value": 20, "label": "20 g"},
+        {"value": 50, "label": "50 g"},
+        {"value": 100, "label": "100 g"},
+        {"value": 200, "label": "200 g"},
+        {"value": 250, "label": "250 g"},
+        {"value": 500, "label": "500 g"},
+        {"value": 1000, "label": "1 kg"},
+        {"value": 2000, "label": "2 kg"},
+        {"value": 5000, "label": "5 kg"},
+        {"value": 10000, "label": "10 kg"},
+        {"value": 20000, "label": "20 kg"},
+        {"value": 50000, "label": "50 kg"}
+      ]
+    },
+    "VOLUME": {
+      "description": "Standard quantities by volume",
+      "unit": "ml",
+      "standards": [
+        {"value": 10, "label": "10 ml"},
+        {"value": 20, "label": "20 ml"},
+        {"value": 50, "label": "50 ml"},
+        {"value": 100, "label": "100 ml"},
+        {"value": 200, "label": "200 ml"},
+        {"value": 250, "label": "250 ml"},
+        {"value": 500, "label": "500 ml"},
+        {"value": 1000, "label": "1 l"},
+        {"value": 2000, "label": "2 l"},
+        {"value": 5000, "label": "5 l"},
+        {"value": 10000, "label": "10 l"},
+        {"value": 15000, "label": "15 l"},
+        {"value": 20000, "label": "20 l"}
+      ]
+    },
+    "NUMBER": {
+      "description": "Standard quantities by count",
+      "unit": "nos",
+      "standards": [
+        {"value": 1, "label": "1 piece"},
+        {"value": 2, "label": "2 pieces"},
+        {"value": 4, "label": "4 pieces"},
+        {"value": 6, "label": "6 pieces"},
+        {"value": 10, "label": "10 pieces"},
+        {"value": 12, "label": "12 pieces"},
+        {"value": 20, "label": "20 pieces"},
+        {"value": 24, "label": "24 pieces"},
+        {"value": 50, "label": "50 pieces"},
+        {"value": 100, "label": "100 pieces"}
+      ]
+    },
+    "LENGTH": {
+      "description": "Standard quantities by length",
+      "unit": "m",
+      "standards": [
+        {"value": 1, "label": "1 m"},
+        {"value": 2, "label": "2 m"},
+        {"value": 5, "label": "5 m"},
+        {"value": 10, "label": "10 m"},
+        {"value": 15, "label": "15 m"},
+        {"value": 20, "label": "20 m"},
+        {"value": 25, "label": "25 m"},
+        {"value": 50, "label": "50 m"},
+        {"value": 100, "label": "100 m"}
+      ]
+    }
+  },
+  "category_specific_standards": {
+    "FOOD_SPICES": {
+      "unit": "g",
+      "standard_values": [10, 20, 50, 100, 200, 250, 500, 1000]
+    },
+    "FOOD_OIL": {
+      "unit": "ml",
+      "standard_values": [50, 100, 200, 250, 500, 1000, 2000, 5000]
+    },
+    "FOOD_BEVERAGES": {
+      "unit": "ml",
+      "standard_values": [100, 150, 200, 250, 300, 500, 750, 1000, 1500, 2000]
+    },
+    "COS_SKINCARE": {
+      "unit": "g",
+      "standard_values": [10, 20, 30, 50, 100, 150, 200, 500]
+    },
+    "COS_HAIR": {
+      "unit": "ml",
+      "standard_values": [50, 100, 150, 200, 250, 300, 400, 500, 1000]
+    },
+    "GEN_HOUSEHOLD": {
+      "unit": "g",
+      "standard_values": [50, 100, 200, 250, 500, 1000, 2000, 5000]
+    }
+  },
+  "unit_conversions": {
+    "kg_to_g": 1000,
+    "l_to_ml": 1000,
+    "oz_to_g": 28.3495,
+    "lb_to_g": 453.592,
+    "lb_to_kg": 0.453592,
+    "gal_to_l": 3.78541,
+    "oz_to_ml": 29.5735,
+    "fl_oz_to_ml": 29.5735
+  },
+  "valid_units": {
+    "weight": ["g", "kg", "mg", "tonne", "mt"],
+    "volume": ["ml", "l", "cl", "dl"],
+    "number": ["nos", "pieces", "pcs", "count", "units"],
+    "length": ["mm", "cm", "m", "km"],
+    "area": ["sq cm", "sq m", "sq mm", "sq inch", "sq ft"]
+  }
+}

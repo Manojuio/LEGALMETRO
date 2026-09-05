@@ -1,0 +1,86 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.pyo
+*.pyd
+
+# Build / packaging
+build/
+dist/
+wheels/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads and reports (user-generated content)
+uploads/
+reports/
+productimage/
+
+# Backend logs
+*.log
+logs/
+
+# Frontend dependencies
+frontend/node_modules/
+frontend/.next/
+frontend/dist/
+frontend/.turbo/
+
+# Other Node dependencies/build files
+node_modules/
+.next/
+.turbo/
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.coverage.*
+
+# Alembic
+alembic/versions/*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Pytest / cache
+.mypy_cache/
+.ruff_cache/
+
+# Local development
+*.local
+
+debug/

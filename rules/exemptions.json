@@ -1,0 +1,73 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "source": "Legal Metrology (Packaged Commodities) Rules, 2011",
+    "source_reference": "Rule 26 and First Schedule exemptions",
+    "last_updated": "2026-08-31"
+  },
+  "exemptions": [
+    {
+      "id": "EXEMPT-001",
+      "title": "Commodity meant for export",
+      "description": "Pre-packaged commodities meant for export are exempt from domestic labeling requirements.",
+      "rule_scope": ["ALL"],
+      "condition": "product is_exported == true",
+      "affected_rules": ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"],
+      "evidence_required": ["export_documentation"]
+    },
+    {
+      "id": "EXEMPT-002",
+      "title": "Commodity for institutional supply",
+      "description": "Pre-packaged commodities supplied to hotels, restaurants, or institutions for bulk use may have simplified labeling.",
+      "rule_scope": ["ALL"],
+      "condition": "product sale_type == INSTITUTIONAL",
+      "affected_rules": ["7", "8", "14"],
+      "evidence_required": ["institutional_supply_proof"]
+    },
+    {
+      "id": "EXEMPT-003",
+      "title": "Commodity with net quantity less than prescribed minimum",
+      "description": "Small packages with very low net quantity may have relaxed font size requirements.",
+      "rule_scope": ["7"],
+      "condition": "product surface_area < 50 sq cm",
+      "affected_rules": ["7"],
+      "evidence_required": ["package_dimensions"]
+    },
+    {
+      "id": "EXEMPT-004",
+      "title": "Non-retail packages",
+      "description": "Packages not intended for retail sale are exempt from certain labeling requirements.",
+      "rule_scope": ["ALL"],
+      "condition": "product package_type == NON_RETAIL",
+      "affected_rules": ["7", "8", "14"],
+      "evidence_required": ["package_type_proof"]
+    },
+    {
+      "id": "EXEMPT-005",
+      "title": "Gift packages",
+      "description": "Complimentary gift packages may have simplified labeling.",
+      "rule_scope": ["ALL"],
+      "condition": "product is_gift_package == true",
+      "affected_rules": ["7", "8"],
+      "evidence_required": ["gift_package_proof"]
+    },
+    {
+      "id": "EXEMPT-006",
+      "title": "Medicines and drugs",
+      "description": "Products regulated under Drugs and Cosmetics Act may have separate labeling requirements.",
+      "rule_scope": ["ALL"],
+      "condition": "product category == PHARMACEUTICAL_PRESCRIPTION",
+      "affected_rules": ["3", "4", "5", "6"],
+      "evidence_required": ["drug_license_proof"]
+    },
+    {
+      "id": "EXEMPT-007",
+      "title": "Agricultural produce",
+      "description": "Certain agricultural produce in original form may have simplified requirements.",
+      "rule_scope": ["QUANTITY", "PRICE"],
+      "condition": "product category == AGRICULTURAL_RAW",
+      "affected_rules": ["12", "13", "14"],
+      "evidence_required": ["agricultural_proof"]
+    }
+  ]
+}

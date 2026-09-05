@@ -1,0 +1,81 @@
+{
+  "_comment": "Golden dataset ground truth for the deterministic EXTRACTION layer (Phase 15). OCR is non-deterministic and measured separately on real photos; this evaluates the field extractors over known label text.",
+  "fixtures": {
+    "valid_tea": {
+      "input_lines": [
+        "Premium Tea",
+        "Net Wt. 500 g",
+        "MRP Rs. 450",
+        "Mfd. by ABC Foods Pvt Ltd",
+        "Plot 12, Industrial Area, Delhi",
+        "Made in India",
+        "Batch No: BN-2601",
+        "Packed: 08/2026",
+        "Best Before: 24 months",
+        "Customer Care: 1800-123-456"
+      ],
+      "expected_fields": {
+        "commodity_name": "Premium Tea",
+        "net_quantity": "500 g",
+        "mrp": "450",
+        "manufacturer_name": "ABC Foods Pvt Ltd",
+        "manufacturer_address": "Plot 12, Industrial Area, Delhi",
+        "country_of_origin": "India",
+        "batch_number": "BN-2601",
+        "packing_date": "08/2026",
+        "best_before_date": null,
+        "consumer_care_contact": null
+      },
+      "notes": "consumer_care_contact and best_before_date may be absent: bare phone without same-line marker is skipped, and '24 months' (no 'from/of') is not extracted."
+    },
+    "valid_salt": {
+      "input_lines": [
+        "Salt",
+        "Net Wt. 1 kg",
+        "MRP Rs. 30",
+        "Packed by Prachi Foods",
+        "Pune, Maharashtra, India",
+        "Batch No: SL-104",
+        "Packed: 05/2026",
+        "Best Before: 24 months",
+        "Consumer Care: care@prachi.in"
+      ],
+      "expected_fields": {
+        "commodity_name": "Salt",
+        "net_quantity": "1 kg",
+        "mrp": "30",
+        "manufacturer_name": "Prachi Foods",
+        "country_of_origin": null,
+        "batch_number": "SL-104",
+        "packing_date": "05/2026",
+        "best_before_date": null,
+        "consumer_care_contact": null
+      }
+    },
+    "valid_biscuits": {
+      "input_lines": [
+        "Biscuits",
+        "Net Wt. 250 g",
+        "MRP Rs. 40",
+        "Mfd. by XYZ Snacks",
+        "Plot 3, Whitefield, Bengaluru",
+        "Made in India",
+        "Batch No: BS-77",
+        "Packed: 01/2026",
+        "Best Before: 9 months",
+        "Consumer Care: 1800-99-7777"
+      ],
+      "expected_fields": {
+        "commodity_name": "Biscuits",
+        "net_quantity": "250 g",
+        "mrp": "40",
+        "manufacturer_name": "XYZ Snacks",
+        "country_of_origin": "India",
+        "batch_number": "BS-77",
+        "packing_date": "01/2026",
+        "best_before_date": null,
+        "consumer_care_contact": null
+      }
+    }
+  }
+}
