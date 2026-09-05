@@ -755,4 +755,3 @@ Made with ❤️ by the LegalMetro Team
 </div>
 ```
 
-**Idi complete single `README.md` file bro.** Just old README ni full ga replace chesi save → `git add README.md` → commit → push.
