@@ -1,6 +1,4 @@
 
-
-````markdown
 <div align="center">
 
 # 🏛️ Legal Metrology Compliance Scanner
@@ -18,7 +16,6 @@
 
 </div>
 
----
 
 ## 📖 Overview
 
