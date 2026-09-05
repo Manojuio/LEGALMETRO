@@ -1,4 +1,4 @@
-Yes bro 😎 **one complete README.md file laga** istunna. Direct ga copy → `README.md` lo paste cheyyi.
+
 
 ````markdown
 <div align="center">
